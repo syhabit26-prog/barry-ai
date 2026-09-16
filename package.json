@@ -1,0 +1,43 @@
+{
+  "name": "barry",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.52",
+    "@ai-sdk/cohere": "^4.0.41",
+    "@ai-sdk/deepseek": "^3.0.42",
+    "@ai-sdk/google": "^4.0.69",
+    "@ai-sdk/groq": "^4.0.40",
+    "@ai-sdk/mistral": "^4.0.43",
+    "@ai-sdk/openai": "^4.0.65",
+    "@ai-sdk/togetherai": "^3.0.49",
+    "@ai-sdk/xai": "^4.0.58",
+    "@codesandbox/sandpack-react": "^2.20.0",
+    "ai": "^7.0.97",
+    "lucide-react": "^1.44.0",
+    "next": "16.3.4",
+    "next-auth": "^5.0.0-beta.32",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-markdown": "^10.1.0",
+    "react-resizable-panels": "^2.1.7",
+    "remark-gfm": "^4.0.1",
+    "stripe": "^22.6.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
