@@ -23,7 +23,7 @@ export default function ChatPage() {
     {
       role: "assistant",
       content:
-        "Bonjour ! Je suis **BARRY AI** 🧠\n\nJe m'adapte à ta question :\n\n- ⚡ **Questions simples** → réponse rapide\n- 🧠 **Questions complexes** → analyse détaillée\n\nPose-moi n'importe quelle question !",
+        "Bonjour ! Je suis **BARRY AI** 🧠\n\nJe m'adapte à ta question :\n\n- ⚡ **Questions simples** → réponse rapide\n- 🧠 **Questions complexes** → analyse détaillée\n- 🧩 **Énigmes** → réflexion étape par étape\n- 🔢 **Maths** → précision\n\nPose-moi n'importe quelle question !",
     },
   ]);
   const [input, setInput] = useState("");
@@ -74,7 +74,6 @@ export default function ChatPage() {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-yellow-50 via-yellow-100 to-amber-100">
 
-      {/* HEADER */}
       <div className="border-b border-yellow-300 bg-white/80 backdrop-blur-md sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center shadow-lg">
@@ -90,7 +89,6 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* MESSAGES */}
       <div className="flex-1 max-w-4xl mx-auto w-full px-6 py-6 space-y-5">
         {messages.map((msg, i) => (
           <div key={i} className="flex gap-3 min-w-0">
@@ -129,8 +127,7 @@ export default function ChatPage() {
                     [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-3 [&_ol]:space-y-1
                     [&_li]:leading-relaxed [&_li]:text-gray-700 [&_li]:marker:text-yellow-500
                     [&_code]:bg-yellow-100 [&_code]:text-amber-900 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[0.85em] [&_code]:font-mono
-                    [&_pre]:bg-gray-900 [&_pre]:text-yellow-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-3 [&_pre]:text-xs [&_pre]:font-mono [&_pre]:leading-relaxed
-                    [&_pre_code]:bg-transparent [&_pre_code]:text-inherit [&_pre_code]:p-0
+                    [&_pre]:bg-gray-900 [&_pre]:text-yellow-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-3 [&_pre]:text-xs
                     [&_a]:text-yellow-700 [&_a]:underline
                     [&_blockquote]:border-l-4 [&_blockquote]:border-yellow-400 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:my-3 [&_blockquote]:text-gray-500
                     [&_hr]:border-none [&_hr]:border-t [&_hr]:border-yellow-200 [&_hr]:my-4
@@ -143,21 +140,17 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {loading &&
-                i === messages.length - 1 &&
-                msg.role === "assistant" &&
-                !msg.content && (
-                  <span className="text-yellow-600 italic flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-                    BARRY réfléchit...
-                  </span>
-                )}
+              {loading && i === messages.length - 1 && msg.role === "assistant" && !msg.content && (
+                <span className="text-yellow-600 italic flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+                  BARRY réfléchit...
+                </span>
+              )}
             </div>
           </div>
         ))}
       </div>
 
-      {/* SAISIE */}
       <div className="sticky bottom-0 border-t border-yellow-300 bg-white/90 backdrop-blur-md">
         <div className="max-w-4xl mx-auto w-full px-6 py-4">
           <div className="flex gap-2 bg-white border-2 border-yellow-300 rounded-2xl p-2 focus-within:border-yellow-500 transition-colors shadow-lg">
