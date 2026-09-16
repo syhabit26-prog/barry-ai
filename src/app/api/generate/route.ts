@@ -9,155 +9,212 @@ import { xai } from "@ai-sdk/xai";
 import { togetherai } from "@ai-sdk/togetherai";
 import { generateText } from "ai";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
-// ═══════════════════════════════════════════════════════════════
-// DETECTION DU MODE (dropshipping / code / chat)
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// IDENTITÉ BARRY AI
+// ═══════════════════════════════════════════════════════
+const BARRY_IDENTITY = `
+Tu es BARRY AI, un assistant personnel premium créé par Mouhamed Barry.
+
+MISSION : aider dans tous les domaines (développement, business, finance, éducation, créativité, vie quotidienne).
+
+RÈGLES ABSOLUES :
+- NE JAMAIS mentionner OpenAI, Anthropic, Claude, Gemini, Groq, Mistral, Cohere, Meta, Llama, xAI, Grok, DeepSeek, Together AI ou un autre fournisseur.
+- NE JAMAIS dire "je suis un modèle de langage" ou "je suis une IA".
+- Tu es BARRY AI, UNIQUEMENT BARRY AI.
+- Si on demande qui t'a créé : "J'ai été créé par Mouhamed Barry".
+
+DÉTECTION LANGUE :
+- Détecte la langue de l'utilisateur et réponds DANS LA MÊME LANGUE.
+
+RÈGLE DE LOGIQUE (TRÈS IMPORTANTE) :
+Avant de répondre, réfléchis à la logique de la situation :
+1. Relis la question mentalement
+2. Identifie l'OBJECTIF RÉEL de l'utilisateur
+3. Vérifie que ta réponse a du SENS dans la vraie vie
+4. Si ta réponse est absurde, change de stratégie
+
+EXEMPLES :
+- "Laver ma voiture à 100m" → "Conduis ta voiture au lave-auto" (pas "va à pied" !)
+- "J'ai faim mais pas d'argent" → "Regarde ce que tu as chez toi" (pas "va au restaurant" !)
+
+RÈGLES DE MISE EN FORME (CRUCIALES) :
+- N'utilise JAMAIS de tableaux Markdown (| col | col |)
+- N'utilise JAMAIS de balises HTML (<br>, <p>, <div>)
+- N'utilise PAS de caractères spéciaux bizarres
+- N'utilise PAS de sauts de ligne excessifs
+
+UTILISE UNIQUEMENT :
+- ## pour les titres principaux
+- ### pour les sous-titres
+- - pour les listes à puces
+- 1. 2. 3. pour les listes numérotées
+- **gras** pour les points importants
+- \`code\` pour le code inline
+- Laisse une ligne vide entre les paragraphes
+
+STRUCTURE RECOMMANDÉE :
+## Titre clair
+
+Introduction en 1-2 phrases.
+
+### Premier point
+- Explication
+- Exemple
+
+### Deuxième point
+- Explication
+- Exemple
+
+### En résumé
+Conclusion en 1-2 phrases.
+`;
+
+// ═══════════════════════════════════════════════════════
+// DETECTION MODE
+// ═══════════════════════════════════════════════════════
 function detectMode(prompt: string): "dropshipping" | "code" | "chat" {
   const lower = prompt.toLowerCase();
-
-  const shopKeywords = [
-    "boutique", "shop", "e-commerce", "ecommerce", "dropshipping",
-    "vendre", "vente", "catalogue", "panier", "store", "magasin",
-  ];
-
-  const codeKeywords = [
-    "cree", "creer", "genere", "fais",
-    "site", "page", "landing", "portfolio",
-    "jeu", "game", "app", "application",
-    "calculatrice", "todo", "snake", "memory",
-  ];
+  const shopKeywords = ["boutique", "shop", "e-commerce", "ecommerce", "dropshipping", "vendre", "vente", "catalogue", "panier", "store", "magasin"];
+  const codeKeywords = ["cree", "creer", "genere", "fais", "site", "page", "landing", "portfolio", "jeu", "game", "app", "application", "calculatrice", "todo", "snake", "memory"];
 
   if (shopKeywords.some((kw) => lower.includes(kw))) return "dropshipping";
   if (codeKeywords.some((kw) => lower.includes(kw))) return "code";
   return "chat";
 }
 
-// ═══════════════════════════════════════════════════════════════
-// EXTRACTION DU MOT-CLE PRODUIT
-// ═══════════════════════════════════════════════════════════════
-function extractKeyword(prompt: string): string {
-  const lower = prompt.toLowerCase().trim();
+// ═══════════════════════════════════════════════════════
+// COMPLEXITE
+// ═══════════════════════════════════════════════════════
+function isComplex(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  const words = lower.split(/\s+/);
 
-  // Mots generiques a enlever
-  const generics = [
-    "cree", "creer", "créé", "genere", "generer", "génère", "fais", "faire",
-    "moi", "une", "un", "des", "de", "du", "d'", "la", "le", "les",
-    "boutique", "shop", "store", "magasin", "e-commerce", "ecommerce",
-    "en ligne", "enligne", "pour", "avec", "sur",
+  const complexKeywords = [
+    "explique", "analyse", "compare", "pourquoi", "comment",
+    "detaille", "strategy", "strategie", "plan", "guide",
+    "tutoriel", "etapes", "difference", "avantage", "inconvenient",
+    "conseil", "recommande", "aide-moi", "aide moi",
+    "financier", "comptable", "marketing", "juridique",
+    "code", "programme", "fonction", "algorithm",
+    "business", "entreprise", "startup", "projet",
   ];
 
-  // Enleve les mots generiques
-  let cleaned = lower;
-  for (const word of generics) {
-    cleaned = cleaned.replace(new RegExp(`\\b${word}\\b`, "gi"), " ");
-  }
-
-  // Enleve les caracteres speciaux
-  cleaned = cleaned
-    .replace(/[^\w\s\u00C0-\u017F'-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  // Si le mot-cle est vide ou trop court, fallback
-  if (!cleaned || cleaned.length < 3) {
-    return "produits varies";
-  }
-
-  // Limite a 5 mots max
-  const words = cleaned.split(/\s+/).slice(0, 5);
-  return words.join(" ");
+  if (words.length > 15) return true;
+  if (complexKeywords.some((kw) => lower.includes(kw))) return true;
+  return false;
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// CHAT INTELLIGENT
+// ═══════════════════════════════════════════════════════
+async function intelligentChat(prompt: string): Promise<string> {
+  const complex = isComplex(prompt);
+  console.log("🎯 Complexite :", complex ? "COMPLEXE" : "SIMPLE");
+
+  if (!complex) {
+    console.log("⚡ Routage → Groq");
+    const { text } = await generateText({
+      model: groq("openai/gpt-oss-120b"),
+      system: BARRY_IDENTITY,
+      prompt,
+    });
+    return text;
+  }
+
+  console.log("🧠 Routage → Groq + Gemini");
+
+  const [groqResult, geminiResult] = await Promise.allSettled([
+    generateText({
+      model: groq("openai/gpt-oss-120b"),
+      system: BARRY_IDENTITY,
+      prompt,
+    }),
+    generateText({
+      model: google("gemini-2.0-flash-exp"),
+      system: BARRY_IDENTITY,
+      prompt,
+    }),
+  ]);
+
+  const groqText = groqResult.status === "fulfilled" ? groqResult.value.text : "";
+  const geminiText = geminiResult.status === "fulfilled" ? geminiResult.value.text : "";
+
+  console.log("✅ Groq :", groqText.length, "car | Gemini :", geminiText.length, "car");
+
+  if (!groqText && !geminiText) throw new Error("Aucune IA n'a repondu");
+  if (!groqText) return geminiText;
+  if (!geminiText) return groqText;
+
+  return geminiText.length > groqText.length ? geminiText : groqText;
+}
+
+// ═══════════════════════════════════════════════════════
 // ROUTE PRINCIPALE
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { prompt, provider, mode: manualMode, customization } = body;
+    const { prompt, mode: manualMode, customization } = body;
 
     const mode = manualMode || detectMode(prompt);
     console.log("🎯 Mode :", mode, "| Prompt :", prompt.slice(0, 50));
 
-    const modele =
-      provider === "claude" ? anthropic("claude-3-5-haiku-20241022")
-      : provider === "deepseek" ? deepseek("deepseek-chat")
-      : provider === "groq" ? groq("openai/gpt-oss-120b")
-      : provider === "gemini" ? google("gemini-3.6-flash")
-      : provider === "mistral" ? mistral("mistral-small-latest")
-      : provider === "cohere" ? cohere("command-r7b-12-2024")
-      : provider === "grok" ? xai("grok-vision-beta")
-      : provider === "together" ? togetherai("meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo")
-      : openai("gpt-4o-mini");
+    // ═══ CHAT ═══
+    if (mode === "chat") {
+      const text = await intelligentChat(prompt);
+      return Response.json({ ok: true, text, mode: "chat" });
+    }
 
-    // ═══════════════════════════════════════════════════════════
-    // MODE DROPSHIPPING
-    // ═══════════════════════════════════════════════════════════
+    // ═══ DROPSHIPPING ═══
     if (mode === "dropshipping") {
+      const modele = groq("openai/gpt-oss-120b");
       let storeName = customization?.storeName;
 
-      // Si pas de nom donne, l'IA en genere un
       if (!storeName) {
         const { text: nameText } = await generateText({
           model: modele,
-          system: [
-            "Tu generes UNIQUEMENT un nom de boutique creatif en francais.",
-            "Reponds UNIQUEMENT avec le nom, rien d'autre.",
-            "Pas de guillemets, pas d'explications, pas de markdown.",
-            "Exemple : SneakerKing, TechStore, BijouxChic",
-          ].join("\n"),
+          system: "Tu generes UNIQUEMENT un nom de boutique creatif en francais. Reponds UNIQUEMENT avec le nom. Pas de guillemets.",
           prompt,
         });
-        storeName =
-          nameText
-            .trim()
-            .replace(/[^a-zA-Z0-9\s'-]/g, "")
-            .slice(0, 30) || "Premium Store";
+        storeName = nameText.trim().replace(/[^a-zA-Z0-9\s'-]/g, "").slice(0, 30) || "Premium Store";
       }
 
       const tagline = "Decouvrez notre collection exclusive";
 
-      // ⭐ Extrait le mot-cle produit du prompt
-      const keyword = extractKeyword(prompt);
-      console.log("🔍 Mot-cle extrait :", keyword);
+      const lower = prompt.toLowerCase().replace(/[^\w\s]/g, " ");
+      const cleaned = lower
+        .replace(/cree|creer|moi|une|un|des|de|du|d|la|le|les|boutique|shop|store|magasin|en ligne|pour|avec|sur/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const keyword = cleaned.split(" ").slice(0, 4).join(" ") || "produits varies";
 
       const { buildDropshippingSite } = await import("@/lib/dropshippingTemplate");
-      const html = buildDropshippingSite(
-        storeName,
-        tagline,
-        keyword,
-        customization?.color,
-        customization?.mood
-      );
+      const html = buildDropshippingSite(storeName, tagline, keyword, customization?.color, customization?.mood);
 
-      return Response.json({
-        ok: true,
-        text: "```html\n" + html + "\n```",
-        mode: "dropshipping",
-        storeName,
-        keyword,
-      });
+      return Response.json({ ok: true, text: "```html\n" + html + "\n```", mode: "dropshipping" });
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // MODE CODE (site / jeu / app)
-    // ═══════════════════════════════════════════════════════════
+    // ═══ CODE ═══
     if (mode === "code") {
-      const systemCode = [
-        "Tu generes un site web complet et fonctionnel en HTML/CSS/JavaScript.",
-        "Structure : <!DOCTYPE html><head><style>...</style></head><body><script>...</script></body></html>.",
-        "PAS de systeme de paiement, PAS de catalogue produits.",
-        "C'est un site creatif, un jeu, ou une app selon la demande.",
-        "HTML/CSS/JS pur (PAS de React, PAS de framework).",
-        "Design moderne, colore, responsive, emojis pour les icones.",
-        "Chaque bouton doit avoir onclick ou addEventListener.",
-        "Reponds UNIQUEMENT avec le code dans un bloc ```html ... ```.",
-      ].join("\n");
+      const systemCode = BARRY_IDENTITY + `
+
+Tu generes un site web/jeu/app COMPLET en HTML/CSS/JavaScript.
+
+RÈGLES ABSOLUES :
+1. Tout le code dans UN SEUL fichier HTML autonome
+2. Utilise <canvas> pour les jeux
+3. Graphismes : dessine avec Canvas API (arc, rect, fill)
+4. Sons : Web Audio API (oscillateurs)
+5. Animations : requestAnimationFrame
+6. ZERO ressource externe (pas d'URL http://)
+7. Design moderne, coloré, responsive
+
+Réponds UNIQUEMENT avec le code dans un bloc html.`;
 
       const { text } = await generateText({
-        model: modele,
+        model: groq("openai/gpt-oss-120b"),
         system: systemCode,
         prompt,
       });
@@ -165,41 +222,22 @@ export async function POST(req: Request) {
       return Response.json({ ok: true, text, mode: "code" });
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // MODE CUSTOM (agents, guide)
-    // ═══════════════════════════════════════════════════════════
-    if (mode === "custom" && body.customSystemPrompt) {
+    // ═══ CUSTOM (agents) ═══
+    if (body.customSystemPrompt) {
       const { text } = await generateText({
-        model: modele,
-        system: body.customSystemPrompt,
+        model: groq("openai/gpt-oss-120b"),
+        system: BARRY_IDENTITY + "\n\n" + body.customSystemPrompt,
         prompt,
       });
       return Response.json({ ok: true, text, mode: "custom" });
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // MODE CHAT (defaut)
-    // ═══════════════════════════════════════════════════════════
-    const systemChat = [
-      "Tu es BARRY AI, un assistant expert.",
-      "Detecte la langue de l'utilisateur et reponds DANS LA MEME LANGUE.",
-      "Style : clair, structure, utilise du Markdown.",
-      "SECURITE : Jamais de contenu explicite, violent ou illegal.",
-    ].join("\n");
-
-    const { text } = await generateText({
-      model: modele,
-      system: systemChat,
-      prompt,
-    });
-
+    // ═══ FALLBACK ═══
+    const text = await intelligentChat(prompt);
     return Response.json({ ok: true, text, mode: "chat" });
 
   } catch (err: any) {
     console.error("ERREUR API :", err);
-    return Response.json(
-      { ok: false, error: err?.message || String(err) },
-      { status: 500 }
-    );
+    return Response.json({ ok: false, error: err?.message || String(err) }, { status: 500 });
   }
 }
