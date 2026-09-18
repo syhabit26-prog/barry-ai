@@ -1,11 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { Send, Sparkles, Zap } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Send, Sparkles, Zap, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { loadChat, saveChat, clearChat, PAGE_KEYS, type ChatMessage } from "@/lib/chatHistory";
 
-type Message = { role: "user" | "assistant"; content: string };
+type Message = ChatMessage;
+
+const MESSAGE_INITIAL: Message = {
+  role: "assistant",
+  content:
+    "Bonjour ! Je suis **BARRY AI** 🧠\n\nJe me souviens de TOUTE notre conversation.\n\nPose-moi n'importe quelle question !",
+};
 
 function cleanMarkdown(text: string): string {
   return text
@@ -19,21 +26,46 @@ function cleanMarkdown(text: string): string {
 }
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content:
-        "Bonjour ! Je suis **BARRY AI** 🧠\n\nJe me souviens de TOUTE notre conversation.\n\nPose-moi n'importe quelle question !",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([MESSAGE_INITIAL]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // ─── Charger l'historique au démarrage ─────────────────────────
+  useEffect(() => {
+    const saved = loadChat(PAGE_KEYS.CHAT);
+    if (saved.length > 0) {
+      setMessages(saved);
+    }
+    setMounted(true);
+  }, []);
+
+  // ─── Sauvegarder automatiquement à chaque changement ───────────
+  useEffect(() => {
+    if (mounted && messages.length > 0) {
+      saveChat(PAGE_KEYS.CHAT, messages);
+    }
+  }, [messages, mounted]);
+
+  // ─── Scroll automatique vers le bas ────────────────────────────
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
+  const handleClear = () => {
+    if (confirm("Effacer toute la conversation ?")) {
+      clearChat(PAGE_KEYS.CHAT);
+      setMessages([MESSAGE_INITIAL]);
+    }
+  };
 
   const handleSend = async () => {
     const texte = input.trim();
     if (!texte || loading) return;
 
-    // Crée le nouveau tableau de messages
     const nouveauxMessages: Message[] = [
       ...messages,
       { role: "user", content: texte },
@@ -43,7 +75,6 @@ export default function ChatPage() {
     setInput("");
     setLoading(true);
 
-    // Ajoute une bulle vide pour la réponse
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
@@ -52,13 +83,12 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "chat",
-          messages: nouveauxMessages, // ⭐ ON ENVOIE TOUT L'HISTORIQUE
+          messages: nouveauxMessages,
         }),
       });
 
       if (!res.body) throw new Error("Pas de reponse");
 
-      // Streaming
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let texteComplet = "";
@@ -101,13 +131,21 @@ export default function ChatPage() {
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center shadow-lg">
             <Sparkles className="w-5 h-5 text-white" />
           </div>
-          <div>
+          <div className="flex-1">
             <h1 className="text-xl font-black text-stone-900 tracking-wide">BARRY AI</h1>
             <p className="text-xs text-stone-600 flex items-center gap-1">
               <Zap className="w-3 h-3" />
-              Chat intelligent · Mémoire complète
+              Chat intelligent · Mémoire persistante
             </p>
           </div>
+          <button
+            onClick={handleClear}
+            className="flex items-center gap-1.5 text-xs text-stone-500 hover:text-red-600 hover:bg-red-50 px-3 py-2 rounded-xl transition-all"
+            title="Effacer la conversation"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Effacer
+          </button>
         </div>
       </div>
 
@@ -173,6 +211,7 @@ export default function ChatPage() {
             </div>
           </div>
         ))}
+        <div ref={scrollRef} />
       </div>
 
       {/* SAISIE */}

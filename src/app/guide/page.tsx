@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { Send, Compass, Sparkles, Target } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Send, Compass, Sparkles, Target, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { loadChat, saveChat, clearChat, PAGE_KEYS, type ChatMessage } from "@/lib/chatHistory";
 
-type Message = { role: "user" | "assistant"; content: string };
+type Message = ChatMessage;
 
 const QUESTIONS = [
   "🎯 Je veux changer de carrière",
@@ -16,22 +17,57 @@ const QUESTIONS = [
   "💪 Je manque de motivation",
 ];
 
+const MESSAGE_INITIAL: Message = {
+  role: "assistant",
+  content:
+    "Bonjour ! Je suis BARRY AI Coach 🧭\n\nJe suis là pour t'accompagner jusqu'à ta réussite :\n\n🎯 **Carrière** — trouver un job, préparer un entretien\n📚 **Apprentissage** — te former, évoluer\n🚀 **Entrepreneuriat** — créer ton business\n💰 **Finance perso** — budget, épargne\n💪 **Motivation** — retrouver l'élan\n\n**Quel est ton objectif principal en ce moment ?**",
+};
+
 export default function GuidePage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content:
-        "Bonjour ! Je suis BARRY AI Coach 🧭\n\nJe suis là pour t'accompagner jusqu'à ta réussite :\n\n🎯 **Carrière** — trouver un job, préparer un entretien\n📚 **Apprentissage** — te former, évoluer\n🚀 **Entrepreneuriat** — créer ton business\n💰 **Finance perso** — budget, épargne\n💪 **Motivation** — retrouver l'élan\n\n**Quel est ton objectif principal en ce moment ?**",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([MESSAGE_INITIAL]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Charger l'historique
+  useEffect(() => {
+    const saved = loadChat(PAGE_KEYS.COACH);
+    if (saved.length > 0) setMessages(saved);
+    setMounted(true);
+  }, []);
+
+  // Sauvegarder à chaque changement
+  useEffect(() => {
+    if (mounted && messages.length > 0) {
+      saveChat(PAGE_KEYS.COACH, messages);
+    }
+  }, [messages, mounted]);
+
+  // Scroll auto
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
+  const handleClear = () => {
+    if (confirm("Effacer toute la conversation ?")) {
+      clearChat(PAGE_KEYS.COACH);
+      setMessages([MESSAGE_INITIAL]);
+    }
+  };
 
   const handleSend = async (customText?: string) => {
     const texte = customText || input.trim();
     if (!texte || loading) return;
 
-    setMessages((prev) => [...prev, { role: "user", content: texte }]);
+    const nouveauxMessages: Message[] = [
+      ...messages,
+      { role: "user", content: texte },
+    ];
+
+    setMessages(nouveauxMessages);
     setInput("");
     setLoading(true);
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
@@ -41,9 +77,8 @@ export default function GuidePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: texte,
-          provider: "groq",
-          mode: "custom",
+          mode: "chat",
+          messages: nouveauxMessages,
           customSystemPrompt: `Tu es BARRY AI Coach, un coach personnel d'excellence qui accompagne les gens vers la réussite.
 
 TA MISSION :
@@ -71,33 +106,32 @@ FORMAT :
 - Listes à puces et numérotées
 - **Gras** pour les points clés
 - Termine par un **Plan d'action** en 3 étapes
-- Ajoute une phrase de motivation
-
-RÈGLES :
-- Réponds dans la langue de l'utilisateur
-- Sois concret, jamais vague
-- Ne juge jamais
-- Si médical/juridique → redirige vers un professionnel
-- Encourage toujours l'action`,
+- Ajoute une phrase de motivation`,
         }),
       });
 
-      const data = await res.json();
+      if (!res.body) throw new Error("Pas de reponse");
 
-      setMessages((prev) => {
-        const copie = [...prev];
-        copie[copie.length - 1] = {
-          role: "assistant",
-          content: data.ok ? data.text : "Erreur : " + data.error,
-        };
-        return copie;
-      });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let texteComplet = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        texteComplet += decoder.decode(value, { stream: true });
+        setMessages((prev) => {
+          const copie = [...prev];
+          copie[copie.length - 1] = { role: "assistant", content: texteComplet };
+          return copie;
+        });
+      }
     } catch (err: any) {
       setMessages((prev) => {
         const copie = [...prev];
         copie[copie.length - 1] = {
           role: "assistant",
-          content: "Erreur reseau : " + err.message,
+          content: "Erreur : " + err.message,
         };
         return copie;
       });
@@ -107,56 +141,60 @@ RÈGLES :
   };
 
   return (
-    <div className="relative min-h-screen">
-      {/* Fond bleu sombre avec halos */}
-      <div className="fixed inset-0 -z-10 bg-[#0a0f1e]">
-        <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[70%] rounded-full bg-blue-600/20 blur-[150px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[55%] h-[70%] rounded-full bg-cyan-500/15 blur-[150px]" />
-        <div className="absolute top-[40%] left-[40%] w-[40%] h-[50%] rounded-full bg-sky-500/10 blur-[130px]" />
+    <div className="min-h-screen flex flex-col bg-[#0a0f1e] text-blue-50">
+
+      {/* HEADER */}
+      <div className="border-b border-cyan-400/20 bg-[#0a0f1e]/95 backdrop-blur-md sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center shadow-lg shadow-cyan-500/30">
+            <Compass className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1">
+            <h1 className="text-xl font-black text-cyan-300 tracking-wide">BARRY AI Coach</h1>
+            <p className="text-xs text-blue-300/60 flex items-center gap-1">
+              <Sparkles className="w-3 h-3" />
+              Coach personnel · Mémoire persistante
+            </p>
+          </div>
+          <button
+            onClick={handleClear}
+            className="flex items-center gap-1.5 text-xs text-blue-300/60 hover:text-red-400 hover:bg-red-500/10 px-3 py-2 rounded-xl transition-all"
+            title="Effacer la conversation"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Effacer
+          </button>
+        </div>
       </div>
 
-      <div className="min-h-screen flex flex-col max-w-4xl mx-auto w-full px-6 py-8">
+      {/* MESSAGES */}
+      <div className="flex-1 max-w-4xl mx-auto w-full px-6 py-6 space-y-5 overflow-y-auto">
+        {messages.map((msg, i) => (
+          <div key={i} className="flex gap-3 min-w-0">
+            <div
+              className={
+                "w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-black shadow-md " +
+                (msg.role === "user"
+                  ? "bg-gradient-to-br from-cyan-400 to-blue-500 text-white shadow-cyan-500/30"
+                  : "bg-blue-950 text-cyan-300 border border-cyan-400/40")
+              }
+            >
+              {msg.role === "user" ? "Moi" : "🧭"}
+            </div>
 
-        <div className="mb-6">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-cyan-400/40 bg-blue-950/60 backdrop-blur mb-4">
-            <Compass className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="text-xs text-cyan-300">Coach Personnel</span>
-          </div>
-          <h1 className="text-3xl font-black tracking-wider bg-gradient-to-r from-cyan-300 via-sky-400 to-blue-400 bg-clip-text text-transparent">
-            BARRY AI Coach
-          </h1>
-          <p className="text-blue-200/60 text-sm mt-1">
-            Ton accompagnateur vers la réussite personnelle et professionnelle
-          </p>
-        </div>
-
-        <div className="flex-1 space-y-4 mb-6">
-          {messages.map((msg, i) => (
-            <div key={i} className="flex gap-3 min-w-0">
-              <div
-                className={
-                  "w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-black " +
-                  (msg.role === "user"
-                    ? "bg-gradient-to-br from-cyan-400 to-blue-500 text-white shadow-lg shadow-cyan-500/30"
-                    : "bg-blue-950/80 text-cyan-300 border border-cyan-400/50 backdrop-blur")
-                }
-              >
-                {msg.role === "user" ? "Moi" : "🧭"}
-              </div>
-
-              <div
-                className={
-                  "flex-1 min-w-0 p-4 rounded-2xl text-sm leading-relaxed break-words " +
-                  (msg.role === "user"
-                    ? "bg-gradient-to-br from-cyan-400/95 to-blue-500/95 text-white font-medium whitespace-pre-wrap shadow-lg shadow-cyan-500/20"
-                    : "bg-blue-950/60 border border-cyan-400/30 text-blue-50 backdrop-blur")
-                }
-              >
-                {msg.role === "user" ? (
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
-                ) : (
-                  <div
-                    className="break-words
+            <div
+              className={
+                "flex-1 min-w-0 p-4 rounded-2xl text-sm break-words " +
+                (msg.role === "user"
+                  ? "bg-gradient-to-br from-cyan-400 to-blue-500 text-white shadow-md shadow-cyan-500/20"
+                  : "bg-blue-950/50 border border-cyan-400/20 text-blue-50")
+              }
+            >
+              {msg.role === "user" ? (
+                <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+              ) : (
+                <div
+                  className="break-words
                     [&_h1]:text-cyan-300 [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2
                     [&_h2]:text-cyan-300 [&_h2]:text-lg [&_h2]:font-bold [&_h2]:mt-4 [&_h2]:mb-2
                     [&_h3]:text-cyan-400 [&_h3]:text-base [&_h3]:font-bold [&_h3]:mt-3 [&_h3]:mb-1
@@ -168,37 +206,31 @@ RÈGLES :
                     [&_li]:mb-1 [&_li]:leading-relaxed [&_li]:marker:text-cyan-400
                     [&_code]:bg-cyan-400/15 [&_code]:text-cyan-200 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs
                     [&_pre]:bg-[#060a14] [&_pre]:border [&_pre]:border-cyan-400/20 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-3
-                    [&_table]:w-full [&_table]:my-4 [&_table]:border-collapse [&_table]:text-sm
-                    [&_thead]:bg-cyan-400/10
-                    [&_th]:border [&_th]:border-cyan-400/40 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-cyan-300 [&_th]:font-bold
-                    [&_td]:border [&_td]:border-cyan-400/20 [&_td]:px-3 [&_td]:py-2 [&_td]:text-blue-100/90 [&_td]:align-top
-                    [&_tr]:hover:bg-cyan-400/5
-                    [&_blockquote]:border-l-4 [&_blockquote]:border-cyan-400 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-3 [&_blockquote]:text-blue-100/80
-                    [&_a]:text-cyan-400 [&_a]:underline
-                    [&_hr]:border-cyan-400/20 [&_hr]:my-4"
-                  >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {msg.content}
-                    </ReactMarkdown>
-                  </div>
-                )}
+                    [&_table]:hidden
+                    [&_a]:text-cyan-400 [&_a]:underline"
+                >
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {msg.content}
+                  </ReactMarkdown>
+                </div>
+              )}
 
-                {loading &&
-                  i === messages.length - 1 &&
-                  msg.role === "assistant" &&
-                  !msg.content && (
-                    <span className="text-cyan-400/70 italic flex items-center gap-2">
-                      <Target className="w-3 h-3 animate-pulse" />
-                      Ton coach reflechit...
-                    </span>
-                  )}
-              </div>
+              {loading &&
+                i === messages.length - 1 &&
+                msg.role === "assistant" &&
+                !msg.content && (
+                  <span className="text-cyan-400/70 italic flex items-center gap-2">
+                    <Target className="w-3 h-3 animate-pulse" />
+                    Ton coach reflechit...
+                  </span>
+                )}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
+        <div ref={scrollRef} />
 
         {messages.length <= 1 && (
-          <div className="mb-4">
+          <div className="mt-4">
             <p className="text-xs text-cyan-400/60 mb-3 uppercase tracking-wider flex items-center gap-2">
               <Sparkles className="w-3 h-3" />
               Sujets sur lesquels je peux t'aider
@@ -209,7 +241,7 @@ RÈGLES :
                   key={q}
                   onClick={() => handleSend(q)}
                   disabled={loading}
-                  className="text-left text-xs p-3 rounded-lg border border-cyan-400/30 text-cyan-200 bg-blue-950/40 backdrop-blur hover:bg-cyan-400/10 hover:border-cyan-400/60 transition-all"
+                  className="text-left text-xs p-3 rounded-lg border border-cyan-400/30 text-cyan-200 bg-blue-950/40 hover:bg-cyan-400/10 hover:border-cyan-400/60 transition-all"
                 >
                   {q}
                 </button>
@@ -217,28 +249,30 @@ RÈGLES :
             </div>
           </div>
         )}
+      </div>
 
-        <div className="sticky bottom-4 p-4 rounded-2xl border border-cyan-400/30 bg-blue-950/70 backdrop-blur-md shadow-lg shadow-cyan-500/10">
-          <div className="flex gap-2 bg-[#060a14]/80 border border-cyan-400/40 rounded-xl p-2 focus-within:border-cyan-400 focus-within:shadow-md focus-within:shadow-cyan-500/20 transition-all">
+      {/* SAISIE */}
+      <div className="sticky bottom-0 border-t border-cyan-400/20 bg-[#0a0f1e]/95 backdrop-blur-md">
+        <div className="max-w-4xl mx-auto w-full px-6 py-4">
+          <div className="flex gap-2 bg-blue-950/50 border-2 border-cyan-400/30 rounded-2xl p-2 focus-within:border-cyan-400 transition-all">
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
               placeholder="Parle-moi de ton objectif, ta situation..."
               disabled={loading}
-              className="flex-1 min-w-0 bg-transparent px-3 py-2 text-sm outline-none placeholder-cyan-400/50 text-blue-50 disabled:opacity-50"
+              className="flex-1 min-w-0 bg-transparent px-3 py-2 text-sm outline-none text-blue-50 placeholder-cyan-400/40 disabled:opacity-50"
             />
             <button
               onClick={() => handleSend()}
-              disabled={loading}
-              className="bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 disabled:opacity-50 text-white font-bold rounded-lg px-5 py-2 flex items-center gap-2 text-sm flex-shrink-0 shadow-lg shadow-cyan-500/30 transition-all"
+              disabled={loading || !input.trim()}
+              className="bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 disabled:opacity-40 text-white font-bold rounded-xl px-5 py-2 flex items-center gap-2 text-sm shadow-lg shadow-cyan-500/30 transition-all"
             >
               <Send className="w-4 h-4" />
               Envoyer
             </button>
           </div>
         </div>
-
       </div>
     </div>
   );

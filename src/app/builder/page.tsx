@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Send, Sparkles, Code2, RefreshCw, Palette, X } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Send, Sparkles, Code2, RefreshCw, Palette, X, Trash2 } from "lucide-react";
+import { loadChat, saveChat, clearChat, PAGE_KEYS, type ChatMessage } from "@/lib/chatHistory";
 
-type Message = { role: "user" | "assistant"; content: string };
+type Message = ChatMessage;
 
-// ═══ Extraction robuste du HTML ═══
 function extractHtml(text: string): string {
   if (!text) return "";
   let match = text.match(/```html\s*\n([\s\S]*?)```/i);
@@ -44,6 +44,11 @@ const HTML_INITIAL = `<!DOCTYPE html>
 </body>
 </html>`;
 
+const MESSAGE_INITIAL: Message = {
+  role: "assistant",
+  content: "Bonjour ! Decris ce que tu veux creer.\n\nExemples :\n• Cree une boutique de sneakers\n• Cree un jeu snake\n• Cree un portfolio\n• Cree un site pour une banque",
+};
+
 const COLORS = [
   { id: "yellow", name: "Jaune Doré", primary: "#facc15", secondary: "#f59e0b" },
   { id: "purple", name: "Violet", primary: "#a855f7", secondary: "#7c3aed" },
@@ -63,13 +68,13 @@ const MOODS = [
 ];
 
 export default function BuilderPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: "Bonjour ! Decris ce que tu veux creer.\n\nExemples :\n• Cree une boutique de sneakers\n• Cree un jeu snake\n• Cree un portfolio" }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([MESSAGE_INITIAL]);
   const [input, setInput] = useState("");
   const [html, setHtml] = useState(HTML_INITIAL);
   const [loading, setLoading] = useState(false);
   const [key, setKey] = useState(0);
+  const [mounted, setMounted] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const [currentProject, setCurrentProject] = useState<{ id: string; slug: string; published: boolean } | null>(null);
   const [publishing, setPublishing] = useState(false);
@@ -80,6 +85,32 @@ export default function BuilderPage() {
   const [storeName, setStoreName] = useState("");
   const [selectedColor, setSelectedColor] = useState("yellow");
   const [selectedMood, setSelectedMood] = useState("dark-luxury");
+
+  useEffect(() => {
+    const saved = loadChat(PAGE_KEYS.BUILDER);
+    if (saved.length > 0) setMessages(saved);
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && messages.length > 0) {
+      saveChat(PAGE_KEYS.BUILDER, messages);
+    }
+  }, [messages, mounted]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
+  const handleClear = () => {
+    if (confirm("Effacer toute la conversation ?")) {
+      clearChat(PAGE_KEYS.BUILDER);
+      setMessages([MESSAGE_INITIAL]);
+      setCurrentProject(null);
+    }
+  };
 
   const handleSend = async () => {
     const texte = input.trim();
@@ -139,7 +170,6 @@ export default function BuilderPage() {
         const reader = res.body?.getReader();
         const decoder = new TextDecoder();
         let fullText = "";
-
         if (reader) {
           let done = false;
           while (!done) {
@@ -163,7 +193,6 @@ export default function BuilderPage() {
           return copie;
         });
 
-        // 💾 SAUVEGARDE AUTOMATIQUE
         try {
           const saveRes = await fetch("/api/projects/save", {
             method: "POST",
@@ -179,7 +208,6 @@ export default function BuilderPage() {
           });
           const saveData = await saveRes.json();
           if (saveData.ok) {
-            console.log("✅ Site sauvegardé :", saveData.project.slug);
             setCurrentProject({
               id: saveData.project.id,
               slug: saveData.project.slug,
@@ -194,7 +222,6 @@ export default function BuilderPage() {
               return copie;
             });
           } else {
-            console.warn("⚠️ Échec sauvegarde :", saveData.error);
             setMessages((prev) => {
               const copie = [...prev];
               copie[copie.length - 1] = {
@@ -205,7 +232,6 @@ export default function BuilderPage() {
             });
           }
         } catch (saveErr: any) {
-          console.warn("⚠️ Erreur sauvegarde :", saveErr);
           setMessages((prev) => {
             const copie = [...prev];
             copie[copie.length - 1] = {
@@ -262,10 +288,6 @@ export default function BuilderPage() {
       const data = await res.json();
       if (data.ok) {
         setCurrentProject({ ...currentProject, published: data.project.published });
-        console.log(
-          data.project.published ? "🚀 Site publié !" : "🔒 Site dépublié",
-          "/s/" + currentProject.slug
-        );
       } else {
         alert("Erreur : " + data.error);
       }
@@ -292,17 +314,23 @@ export default function BuilderPage() {
           "radial-gradient(at 0% 0%, #fde68a 0%, transparent 50%), radial-gradient(at 100% 0%, #fdba74 0%, transparent 50%), radial-gradient(at 50% 100%, #fef3c7 0%, transparent 50%), #fef9f3",
       }}
     >
-
-      {/* ═══ PANNEAU GAUCHE : CHAT ═══ */}
+      {/* PANNEAU GAUCHE */}
       <div className="w-2/5 flex flex-col rounded-3xl bg-white shadow-[0_8px_40px_rgba(251,146,60,0.15)] overflow-hidden">
         <div className="p-5 flex items-center gap-3 flex-shrink-0 border-b border-orange-100">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/30">
             <Sparkles className="w-5 h-5 text-white" />
           </div>
-          <div>
+          <div className="flex-1">
             <h1 className="font-black tracking-widest text-sm text-zinc-900">BUILDER</h1>
             <p className="text-[10px] text-zinc-500">Barry AI Studio</p>
           </div>
+          <button
+            onClick={handleClear}
+            className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-red-600 hover:bg-red-50 px-2 py-1.5 rounded-lg transition-all"
+            title="Effacer"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-3 bg-orange-50/30">
@@ -326,6 +354,7 @@ export default function BuilderPage() {
               </div>
             </div>
           ))}
+          <div ref={scrollRef} />
         </div>
 
         <div className="p-4 flex-shrink-0 border-t border-orange-100">
@@ -350,7 +379,7 @@ export default function BuilderPage() {
         </div>
       </div>
 
-      {/* ═══ PANNEAU DROIT : APERCU ═══ */}
+      {/* PANNEAU DROIT */}
       <div className="w-3/5 flex flex-col rounded-3xl bg-white shadow-[0_8px_40px_rgba(251,146,60,0.15)] overflow-hidden">
         <div className="h-12 flex items-center px-5 gap-3 flex-shrink-0 border-b border-orange-100 bg-white">
           <div className="flex gap-1.5">
@@ -369,7 +398,6 @@ export default function BuilderPage() {
                 <button
                   onClick={copyPublicUrl}
                   className="flex items-center gap-1 text-xs text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-xl transition-all font-medium"
-                  title={"Lien : /s/" + currentProject.slug}
                 >
                   {copied ? "✅ Copié !" : "🔗 Copier le lien"}
                 </button>
@@ -403,13 +431,13 @@ export default function BuilderPage() {
             key={key}
             srcDoc={html}
             className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-modals allow-forms allow-popups"
+            sandbox="allow-scripts allow-modals allow-forms"
             title="Apercu"
           />
         </div>
       </div>
 
-      {/* ═══ MODALE PERSONNALISATION ═══ */}
+      {/* MODALE */}
       {showCustomize && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-md p-4 overflow-y-auto">
           <div className="relative w-full max-w-2xl my-8 p-8 rounded-3xl bg-white shadow-[0_20px_80px_rgba(251,146,60,0.25)] overflow-hidden">
@@ -429,7 +457,7 @@ export default function BuilderPage() {
                 <h2 className="text-3xl font-black mb-2 text-zinc-900">
                   Personnalise ta <span className="bg-gradient-to-r from-yellow-500 to-orange-500 bg-clip-text text-transparent">boutique</span>
                 </h2>
-                <p className="text-zinc-500 text-sm">Cree une boutique 100% unique selon tes gouts</p>
+                <p className="text-zinc-500 text-sm">Cree une boutique 100% unique</p>
               </div>
 
               <div className="mb-6">
@@ -438,7 +466,7 @@ export default function BuilderPage() {
                   type="text"
                   value={storeName}
                   onChange={(e) => setStoreName(e.target.value)}
-                  placeholder="Ex: SneakerKing, TechStore, Bijoux Chic..."
+                  placeholder="Ex: SneakerKing, TechStore..."
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl px-4 py-3 text-zinc-900 outline-none focus:border-orange-300 focus:bg-white focus:shadow-md focus:shadow-orange-500/10 transition-all placeholder-zinc-400"
                   autoFocus
                 />
@@ -508,7 +536,6 @@ export default function BuilderPage() {
           </div>
         </div>
       )}
-
     </div>
   );
 }
