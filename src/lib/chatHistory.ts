@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
-// Sauvegarde locale de l'historique de chat (localStorage)
-// Permet de garder l'historique même en changeant de page
+// Sauvegarde locale de l'historique (localStorage)
+// Expire automatiquement après 1 heure
 // ═══════════════════════════════════════════════════════════════
 
 export type ChatMessage = {
@@ -8,28 +8,53 @@ export type ChatMessage = {
   content: string;
 };
 
-const STORAGE_PREFIX = "barry-chat-";
+type StoredChat = {
+  messages: ChatMessage[];
+  savedAt: number;  // timestamp en ms
+};
 
-// ─── Charger l'historique d'une page ────────────────────────────
+const STORAGE_PREFIX = "barry-chat-";
+const EXPIRATION_MS = 60 * 60 * 1000;  // 1 heure
+
+// ─── Charger l'historique (avec vérif expiration) ──────────────
 export function loadChat(pageKey: string): ChatMessage[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(STORAGE_PREFIX + pageKey);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed;
+
+    const parsed: StoredChat = JSON.parse(raw);
+
+    // Si l'ancien format (tableau simple) → nettoyer
+    if (Array.isArray(parsed)) {
+      localStorage.removeItem(STORAGE_PREFIX + pageKey);
+      return [];
+    }
+
+    // Vérifier expiration
+    const age = Date.now() - (parsed.savedAt || 0);
+    if (age > EXPIRATION_MS) {
+      console.log("⏰ Historique expiré, suppression");
+      localStorage.removeItem(STORAGE_PREFIX + pageKey);
+      return [];
+    }
+
+    return parsed.messages || [];
   } catch (err) {
     console.warn("⚠️ Erreur chargement historique :", err);
     return [];
   }
 }
 
-// ─── Sauvegarder l'historique d'une page ───────────────────────
+// ─── Sauvegarder avec timestamp ────────────────────────────────
 export function saveChat(pageKey: string, messages: ChatMessage[]): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_PREFIX + pageKey, JSON.stringify(messages));
+    const stored: StoredChat = {
+      messages,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(STORAGE_PREFIX + pageKey, JSON.stringify(stored));
   } catch (err) {
     console.warn("⚠️ Erreur sauvegarde historique :", err);
   }

@@ -11,7 +11,7 @@ type Message = ChatMessage;
 const MESSAGE_INITIAL: Message = {
   role: "assistant",
   content:
-    "Bonjour ! Je suis **BARRY AI** 🧠\n\nJe me souviens de TOUTE notre conversation.\n\nPose-moi n'importe quelle question !",
+    "Bonjour ! Je suis **BARRY AI** 🧠\n\nJe me souviens de TOUTE notre conversation pendant 1 heure.\n\nPose-moi n'importe quelle question !",
 };
 
 function cleanMarkdown(text: string): string {
@@ -32,23 +32,21 @@ export default function ChatPage() {
   const [mounted, setMounted] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // ─── Charger l'historique au démarrage ─────────────────────────
+  // Charger l'historique au démarrage
   useEffect(() => {
     const saved = loadChat(PAGE_KEYS.CHAT);
-    if (saved.length > 0) {
-      setMessages(saved);
-    }
+    if (saved.length > 0) setMessages(saved);
     setMounted(true);
   }, []);
 
-  // ─── Sauvegarder automatiquement à chaque changement ───────────
+  // Sauvegarder automatiquement
   useEffect(() => {
     if (mounted && messages.length > 0) {
       saveChat(PAGE_KEYS.CHAT, messages);
     }
   }, [messages, mounted]);
 
-  // ─── Scroll automatique vers le bas ────────────────────────────
+  // Scroll auto
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: "smooth" });
@@ -135,7 +133,7 @@ export default function ChatPage() {
             <h1 className="text-xl font-black text-stone-900 tracking-wide">BARRY AI</h1>
             <p className="text-xs text-stone-600 flex items-center gap-1">
               <Zap className="w-3 h-3" />
-              Chat intelligent · Mémoire persistante
+              Chat intelligent · Mémoire 1h
             </p>
           </div>
           <button
@@ -236,7 +234,7 @@ export default function ChatPage() {
             </button>
           </div>
           <p className="text-center text-xs text-stone-500 mt-2">
-            BARRY AI se souvient de toute la conversation
+            L'historique est conservé pendant 1 heure
           </p>
         </div>
       </div>
