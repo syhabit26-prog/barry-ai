@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-// Gestion des commandes CJ Dropshipping
-// ═══════════════════════════════════════════════════════════════
-
-import { supabaseAdmin } from "./supabase";
+import { supabaseAdmin } from "./supabaseAdmin";
 
 export type OrderStatus = "pending" | "paid" | "processing" | "shipped" | "delivered" | "cancelled";
 
@@ -38,10 +34,8 @@ export type Order = {
   notes?: string;
 };
 
-// ─── Créer une commande ────────────────────────────────────────
 export async function createOrder(order: Order): Promise<{ ok: boolean; order?: any; error?: string }> {
   try {
-    // 1) Créer la commande principale
     const { data: orderData, error: orderError } = await supabaseAdmin
       .from("cj_orders")
       .insert({
@@ -68,7 +62,6 @@ export async function createOrder(order: Order): Promise<{ ok: boolean; order?: 
       return { ok: false, error: orderError.message };
     }
 
-    // 2) Créer les items
     if (order.products.length > 0) {
       const items = order.products.map((p) => ({
         order_id: orderData.id,
@@ -96,15 +89,11 @@ export async function createOrder(order: Order): Promise<{ ok: boolean; order?: 
   }
 }
 
-// ─── Récupérer toutes les commandes ────────────────────────────
 export async function getOrders(userId?: string | null): Promise<{ ok: boolean; orders?: any[]; error?: string }> {
   try {
     let query = supabaseAdmin
       .from("cj_orders")
-      .select(`
-        *,
-        cj_order_items (*)
-      `)
+      .select(`*, cj_order_items (*)`)
       .order("created_at", { ascending: false });
 
     if (userId) {
@@ -123,15 +112,11 @@ export async function getOrders(userId?: string | null): Promise<{ ok: boolean; 
   }
 }
 
-// ─── Récupérer une commande par ID ─────────────────────────────
 export async function getOrderById(orderId: string): Promise<{ ok: boolean; order?: any; error?: string }> {
   try {
     const { data, error } = await supabaseAdmin
       .from("cj_orders")
-      .select(`
-        *,
-        cj_order_items (*)
-      `)
+      .select(`*, cj_order_items (*)`)
       .eq("id", orderId)
       .single();
 
@@ -145,7 +130,6 @@ export async function getOrderById(orderId: string): Promise<{ ok: boolean; orde
   }
 }
 
-// ─── Mettre à jour le statut d'une commande ────────────────────
 export async function updateOrderStatus(
   orderId: string,
   status: OrderStatus,
@@ -171,7 +155,6 @@ export async function updateOrderStatus(
   }
 }
 
-// ─── Statistiques ──────────────────────────────────────────────
 export async function getOrderStats(userId?: string | null): Promise<{
   ok: boolean;
   stats?: { total: number; pending: number; shipped: number; delivered: number; revenue: number };

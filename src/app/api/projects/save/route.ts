@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { generateSlug } from "@/lib/slug";
 
 export async function POST(req: Request) {
   try {
-    // 1️⃣ On récupère les données envoyées par Building
     const body = await req.json();
     const { name, prompt, html, style, category, userId } = body;
 
-    // 2️⃣ Vérification : le HTML est obligatoire
     if (!html) {
       return NextResponse.json(
         { ok: false, error: "HTML manquant" },
@@ -16,10 +14,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3️⃣ On génère un slug unique
     const slug = generateSlug(name || "mon-site");
 
-    // 4️⃣ On insère dans Supabase
     const { data, error } = await supabaseAdmin
       .from("projects")
       .insert({
@@ -35,7 +31,6 @@ export async function POST(req: Request) {
       .select()
       .single();
 
-    // 5️⃣ Si Supabase renvoie une erreur
     if (error) {
       console.error("❌ Erreur Supabase :", error);
       return NextResponse.json(
@@ -44,7 +39,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 6️⃣ Succès — on log et on renvoie les infos
     console.log("✅ Projet sauvegardé :", data.id, "| slug:", slug);
 
     return NextResponse.json({

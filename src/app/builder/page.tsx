@@ -20,7 +20,6 @@ type ProjectState = {
 
 function extractHtml(text: string): string {
   if (!text) return "";
-
   let cleaned = text.trim();
 
   if (cleaned.startsWith("```html")) {
@@ -40,7 +39,6 @@ function extractHtml(text: string): string {
   if (idxBody !== -1) {
     return `<!DOCTYPE html>\n<html>\n<head><meta charset="utf-8"></head>\n${cleaned.slice(idxBody).trim()}`;
   }
-
   return cleaned;
 }
 
@@ -244,6 +242,9 @@ export default function BuilderPage() {
     await generateFinalSite(projectState);
   };
 
+  // ═══════════════════════════════════════════════════════════
+  // GÉNÉRATION FINALE avec JOB + POLLING
+  // ═══════════════════════════════════════════════════════════
   const generateFinalSite = async (state: ProjectState) => {
     setLoading(true);
 
@@ -266,9 +267,8 @@ export default function BuilderPage() {
 
     if (state.color) prompt += `Couleur principale : ${state.color}. `;
     if (state.mood) prompt += `Ambiance : ${state.mood}. `;
-    if (state.description) prompt += `Contexte : ${state.description}.`;
 
-    console.log("🎯 Prompt final :", prompt);
+    console.log("🎯 Prompt:", prompt);
 
     try {
       const res = await fetch("/api/generate", {
@@ -286,95 +286,123 @@ export default function BuilderPage() {
         }),
       });
 
-      const contentType = res.headers.get("content-type") || "";
-      const isJson = contentType.includes("application/json");
+      const data = await res.json();
 
-      let htmlExtrait = "";
-
-      if (isJson) {
-        const data = await res.json();
-        if (!data.ok) {
-          setMessages((prev) => [
-            ...prev,
-            { role: "assistant", content: "Erreur : " + data.error },
-          ]);
-          return;
-        }
-        htmlExtrait = extractHtml(data.text);
-      } else {
-        const reader = res.body?.getReader();
-        const decoder = new TextDecoder();
-        let fullText = "";
-        if (reader) {
-          let done = false;
-          while (!done) {
-            const { value, done: d } = await reader.read();
-            done = d;
-            if (value) fullText += decoder.decode(value, { stream: true });
-          }
-        }
-        htmlExtrait = extractHtml(fullText);
+      if (!data.ok) {
+        setMessages((prev) => {
+          const copie = [...prev];
+          copie[copie.length - 1] = { role: "assistant", content: "Erreur : " + data.error };
+          return copie;
+        });
+        setLoading(false);
+        return;
       }
 
-      htmlExtrait = htmlExtrait.trim();
+      // ⭐ Si jobId → POLLING
+      if (data.jobId) {
+        const jobId = data.jobId;
+        let attempts = 0;
+        const maxAttempts = 150; // 5 min max
 
+        const interval = setInterval(async () => {
+          attempts++;
+          if (attempts > maxAttempts) {
+            clearInterval(interval);
+            setMessages((prev) => {
+              const copie = [...prev];
+              copie[copie.length - 1] = { role: "assistant", content: "Timeout : génération trop longue." };
+              return copie;
+            });
+            setLoading(false);
+            return;
+          }
+
+          try {
+            const jobRes = await fetch(`/api/jobs/${jobId}`);
+            const jobData = await jobRes.json();
+
+            if (!jobData.ok) {
+              clearInterval(interval);
+              setLoading(false);
+              return;
+            }
+
+            const job = jobData.job;
+
+            // Met à jour la progression
+            setMessages((prev) => {
+              const copie = [...prev];
+              copie[copie.length - 1] = {
+                role: "assistant",
+                content: `Génération en cours... ${job.progress}%`,
+              };
+              return copie;
+            });
+
+            if (job.status === "done") {
+              clearInterval(interval);
+
+              const htmlExtrait = extractHtml(job.result?.html || "");
+              setHtml(htmlExtrait);
+              setKey((k) => k + 1);
+
+              if (job.result?.projectId) {
+                setCurrentProject({
+                  id: job.result.projectId,
+                  slug: job.result.slug,
+                  published: false,
+                });
+              }
+
+              setMessages((prev) => {
+                const copie = [...prev];
+                copie[copie.length - 1] = {
+                  role: "assistant",
+                  content: "C'est prêt ! Ton site est généré.",
+                };
+                return copie;
+              });
+              setLoading(false);
+            } else if (job.status === "error") {
+              clearInterval(interval);
+              setMessages((prev) => {
+                const copie = [...prev];
+                copie[copie.length - 1] = {
+                  role: "assistant",
+                  content: "Erreur : " + (job.error || "inconnue"),
+                };
+                return copie;
+              });
+              setLoading(false);
+            }
+          } catch (err) {
+            clearInterval(interval);
+            setLoading(false);
+          }
+        }, 2000);
+
+        return;
+      }
+
+      // Si pas de jobId → comportement normal (ancien)
+      const htmlExtrait = extractHtml(data.text);
       if (htmlExtrait && htmlExtrait.length > 50) {
         setHtml(htmlExtrait);
         setKey((k) => k + 1);
-
-        try {
-          const saveRes = await fetch("/api/projects/save", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: state.name,
-              prompt,
-              html: htmlExtrait,
-              style: state.mood,
-              category: state.type,
-              userId: null,
-            }),
-          });
-          const saveData = await saveRes.json();
-          if (saveData.ok) {
-            setCurrentProject({
-              id: saveData.project.id,
-              slug: saveData.project.slug,
-              published: false,
-            });
-          }
-        } catch (err) {
-          console.warn("Sauvegarde échouée:", err);
-        }
-
-        const typeLabel =
-          state.type === "boutique" ? "boutique" :
-          state.type === "jeu" ? "jeu" :
-          state.type === "app" ? "application" :
-          state.type === "portfolio" ? "portfolio" : "site";
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: `C'est prêt ! Ton ${typeLabel} "${state.name}" est généré.\n\nRegarde l'aperçu à droite. Tu veux modifier quelque chose ?`,
-          },
-        ]);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: "Je n'ai pas réussi à générer. Reformule ta demande.",
-          },
-        ]);
+        setMessages((prev) => {
+          const copie = [...prev];
+          copie[copie.length - 1] = { role: "assistant", content: "Site généré." };
+          return copie;
+        });
       }
+      setLoading(false);
+
     } catch (err: any) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "Erreur réseau : " + err.message },
-      ]);
-    } finally {
+      setMessages((prev) => {
+        const copie = [...prev];
+        copie[copie.length - 1] = { role: "assistant", content: "Erreur réseau : " + err.message };
+        return copie;
+      });
       setLoading(false);
     }
   };
@@ -533,7 +561,6 @@ export default function BuilderPage() {
           <div className="flex-1 min-w-2" />
 
           <div className="flex items-center gap-1.5 flex-shrink-0">
-
             <button
               onClick={downloadHtml}
               className="h-8 px-3 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 text-zinc-700 text-[12px] font-medium flex items-center gap-1.5 transition-all whitespace-nowrap"
@@ -596,7 +623,7 @@ export default function BuilderPage() {
               key={key}
               srcDoc={html}
               className="w-full h-full border-0"
-                            sandbox="allow-scripts allow-same-origin allow-modals allow-forms allow-popups allow-popups-to-escape-sandbox"
+              sandbox="allow-scripts allow-same-origin allow-modals allow-forms allow-popups allow-popups-to-escape-sandbox"
               title="Aperçu"
             />
           </div>
