@@ -4,47 +4,109 @@ import { ArrowRight, Bot } from "lucide-react";
 
 export default function AgentsPage() {
   return (
-    <div className="min-h-screen px-6 py-16 max-w-6xl mx-auto text-yellow-100">
-      <div className="text-center mb-16">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-yellow-400/40 bg-black/60 mb-6">
-          <Bot className="w-3.5 h-3.5 text-yellow-400" />
-          <span className="text-xs text-yellow-300">Agents spécialisés</span>
-        </div>
-        <h1 className="text-5xl font-black text-yellow-300 tracking-wider mb-4">
-          Ton équipe d'experts
-        </h1>
-        <p className="text-yellow-100/70 max-w-2xl mx-auto">
-          4 experts IA spécialisés, disponibles 24/7 pour t'aider.
-        </p>
+    <div className="relative min-h-screen bg-gradient-to-br from-blue-50 via-white to-red-50 overflow-hidden">
+
+      {/* ═══ BLOBS DÉCORATIFS ═══ */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div
+          className="absolute -top-[20%] -left-[10%] w-[55%] h-[60%] rounded-full opacity-30 blur-[120px]"
+          style={{ background: "linear-gradient(135deg, #3b82f6, #1d4ed8)" }}
+        />
+        <div
+          className="absolute -bottom-[20%] -right-[10%] w-[55%] h-[60%] rounded-full opacity-30 blur-[120px]"
+          style={{ background: "linear-gradient(135deg, #ef4444, #dc2626)" }}
+        />
+        <div
+          className="absolute top-[40%] left-[45%] w-[35%] h-[35%] rounded-full opacity-20 blur-[100px]"
+          style={{ background: "linear-gradient(135deg, #8b5cf6, #6366f1)" }}
+        />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {AGENTS.map((agent) => (
-          <Link key={agent.slug} href={"/agents/" + agent.slug}>
-            <div className="group p-8 rounded-2xl border border-yellow-400/30 bg-black/60 backdrop-blur-md hover:border-yellow-400/80 transition-all cursor-pointer h-full">
-              <div className="flex items-start gap-5">
+      {/* ═══ CONTENU ═══ */}
+      <div className="relative z-10 max-w-6xl mx-auto px-6 py-16">
+
+        {/* HEADER */}
+        <div className="text-center mb-16">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-blue-300 bg-white/70 backdrop-blur-sm mb-6 shadow-sm">
+            <Bot className="w-3.5 h-3.5 text-blue-600" />
+            <span className="text-xs text-blue-700 font-semibold">Agents spécialisés</span>
+          </div>
+
+          <h1 className="text-5xl md:text-6xl font-black text-gray-900 tracking-tight mb-4">
+            Ton équipe d'
+            <span className="bg-gradient-to-r from-blue-600 via-blue-500 to-red-500 bg-clip-text text-transparent">
+              experts
+            </span>
+          </h1>
+
+          <p className="text-gray-600 max-w-2xl mx-auto text-lg">
+            {AGENTS.length} experts IA spécialisés, disponibles 24/7 pour t'aider.
+          </p>
+        </div>
+
+        {/* GRILLE */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {AGENTS.map((agent, index) => {
+            // Alternance des couleurs
+            const isBlue = index % 2 === 0;
+            const gradient = isBlue
+              ? "from-blue-600 to-blue-500"
+              : "from-red-600 to-red-500";
+            const borderColor = isBlue
+              ? "border-blue-300 hover:border-blue-500"
+              : "border-red-300 hover:border-red-500";
+            const bgHover = isBlue ? "hover:bg-blue-50" : "hover:bg-red-50";
+            const textColor = isBlue ? "text-blue-700" : "text-red-700";
+            const shadowColor = isBlue
+              ? "hover:shadow-blue-500/20"
+              : "hover:shadow-red-500/20";
+
+            return (
+              <Link key={agent.slug} href={"/agents/" + agent.slug}>
                 <div
-                  className="w-16 h-16 rounded-2xl flex items-center justify-center text-4xl flex-shrink-0"
-                  style={{ background: agent.color + "33", border: "1px solid " + agent.color + "88" }}
+                  className={
+                    "group p-6 rounded-2xl border-2 bg-white/80 backdrop-blur-sm transition-all cursor-pointer h-full shadow-sm hover:shadow-xl hover:scale-[1.02] " +
+                    borderColor + " " + bgHover + " " + shadowColor
+                  }
                 >
-                  {agent.emoji}
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-2xl font-bold text-yellow-300 mb-1">
-                    {agent.name}
-                  </h2>
-                  <p className="text-yellow-100/60 text-sm mb-4">
-                    {agent.tagline}
-                  </p>
-                  <div className="inline-flex items-center gap-2 text-yellow-400 text-sm font-bold group-hover:gap-3 transition-all">
-                    Discuter avec cet agent
-                    <ArrowRight className="w-4 h-4" />
+                  <div className="flex items-start gap-4">
+                    <div
+                      className={
+                        "w-16 h-16 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0 shadow-lg bg-gradient-to-br " +
+                        gradient
+                      }
+                    >
+                      <span>{agent.emoji}</span>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-xl font-bold text-gray-900 mb-1">
+                        {agent.name}
+                      </h2>
+                      <p className="text-gray-600 text-sm mb-4 leading-relaxed">
+                        {agent.tagline}
+                      </p>
+                      <div
+                        className={
+                          "inline-flex items-center gap-2 text-sm font-bold group-hover:gap-3 transition-all " +
+                          textColor
+                        }
+                      >
+                        Discuter avec cet agent
+                        <ArrowRight className="w-4 h-4" />
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          </Link>
-        ))}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* FOOTER DISCRET */}
+        <p className="text-center text-xs text-gray-500 mt-16">
+          BARRY AI · Créé par Mouhamed Barry
+        </p>
       </div>
     </div>
   );

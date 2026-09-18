@@ -23,7 +23,7 @@ export default function ChatPage() {
     {
       role: "assistant",
       content:
-        "Bonjour ! Je suis **BARRY AI** 🧠\n\nJe m'adapte à ta question :\n\n- ⚡ **Questions simples** → réponse rapide\n- 🧠 **Questions complexes** → analyse détaillée\n\nPose-moi n'importe quelle question !",
+        "Bonjour ! Je suis **BARRY AI** 🧠\n\nJe me souviens de TOUTE notre conversation.\n\nPose-moi n'importe quelle question !",
     },
   ]);
   const [input, setInput] = useState("");
@@ -33,37 +33,58 @@ export default function ChatPage() {
     const texte = input.trim();
     if (!texte || loading) return;
 
-    setMessages((prev) => [...prev, { role: "user", content: texte }]);
+    // Crée le nouveau tableau de messages
+    const nouveauxMessages: Message[] = [
+      ...messages,
+      { role: "user", content: texte },
+    ];
+
+    setMessages(nouveauxMessages);
     setInput("");
     setLoading(true);
+
+    // Ajoute une bulle vide pour la réponse
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: texte, mode: "chat" }),
+        body: JSON.stringify({
+          mode: "chat",
+          messages: nouveauxMessages, // ⭐ ON ENVOIE TOUT L'HISTORIQUE
+        }),
       });
 
-      const data = await res.json();
+      if (!res.body) throw new Error("Pas de reponse");
 
-      if (!data.ok) {
+      // Streaming
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let texteComplet = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        texteComplet += decoder.decode(value, { stream: true });
+
         setMessages((prev) => {
           const copie = [...prev];
-          copie[copie.length - 1] = { role: "assistant", content: "Erreur : " + data.error };
-          return copie;
-        });
-      } else {
-        setMessages((prev) => {
-          const copie = [...prev];
-          copie[copie.length - 1] = { role: "assistant", content: cleanMarkdown(data.text) };
+          copie[copie.length - 1] = {
+            role: "assistant",
+            content: cleanMarkdown(texteComplet),
+          };
           return copie;
         });
       }
     } catch (err: any) {
       setMessages((prev) => {
         const copie = [...prev];
-        copie[copie.length - 1] = { role: "assistant", content: "Erreur reseau : " + err.message };
+        copie[copie.length - 1] = {
+          role: "assistant",
+          content: "Erreur : " + err.message,
+        };
         return copie;
       });
     } finally {
@@ -84,14 +105,14 @@ export default function ChatPage() {
             <h1 className="text-xl font-black text-stone-900 tracking-wide">BARRY AI</h1>
             <p className="text-xs text-stone-600 flex items-center gap-1">
               <Zap className="w-3 h-3" />
-              Chat intelligent · Auto-adaptatif
+              Chat intelligent · Mémoire complète
             </p>
           </div>
         </div>
       </div>
 
       {/* MESSAGES */}
-      <div className="flex-1 max-w-4xl mx-auto w-full px-6 py-6 space-y-5">
+      <div className="flex-1 max-w-4xl mx-auto w-full px-6 py-6 space-y-5 overflow-y-auto">
         {messages.map((msg, i) => (
           <div key={i} className="flex gap-3 min-w-0">
             <div
@@ -125,14 +146,12 @@ export default function ChatPage() {
                     [&_p]:mb-2 [&_p]:leading-relaxed [&_p]:text-stone-700
                     [&_strong]:text-stone-900 [&_strong]:font-bold
                     [&_em]:italic
-                    [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-3 [&_ul]:space-y-1
-                    [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-3 [&_ol]:space-y-1
+                    [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-3
+                    [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-3
                     [&_li]:leading-relaxed [&_li]:text-stone-700 [&_li]:marker:text-amber-500
-                    [&_code]:bg-amber-100 [&_code]:text-amber-900 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[0.85em] [&_code]:font-mono
+                    [&_code]:bg-amber-100 [&_code]:text-amber-900 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[0.85em]
                     [&_pre]:bg-stone-900 [&_pre]:text-yellow-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-3 [&_pre]:text-xs
                     [&_a]:text-amber-700 [&_a]:underline
-                    [&_blockquote]:border-l-4 [&_blockquote]:border-amber-400 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:my-3 [&_blockquote]:text-stone-500
-                    [&_hr]:border-none [&_hr]:border-t [&_hr]:border-stone-200 [&_hr]:my-4
                     [&_table]:hidden
                   "
                 >
@@ -178,7 +197,7 @@ export default function ChatPage() {
             </button>
           </div>
           <p className="text-center text-xs text-stone-500 mt-2">
-            BARRY AI choisit automatiquement la meilleure réponse
+            BARRY AI se souvient de toute la conversation
           </p>
         </div>
       </div>
