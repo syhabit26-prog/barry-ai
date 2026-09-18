@@ -32,7 +32,7 @@ RÈGLES ABSOLUES :
 function detectMode(prompt: string): "dropshipping" | "code" | "chat" {
   const lower = (prompt || "").toLowerCase();
   const shopKeywords = ["boutique", "shop", "e-commerce", "dropshipping", "vendre", "catalogue", "panier", "store", "magasin"];
-  const codeKeywords = ["cree", "creer", "genere", "site", "page", "landing", "portfolio", "jeu", "game", "app", "application", "calculatrice", "snake"];
+  const codeKeywords = ["cree", "creer", "genere", "site", "page", "landing", "portfolio", "jeu", "game", "app", "application", "calculatrice", "snake", "banque", "restaurant", "blog", "vitrine", "ecole", "école", "eleve", "élève", "entreprise"];
 
   if (shopKeywords.some((kw) => lower.includes(kw))) return "dropshipping";
   if (codeKeywords.some((kw) => lower.includes(kw))) return "code";
@@ -44,10 +44,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { prompt, messages, mode: manualMode, customization, provider, customSystemPrompt } = body;
 
-    // ⭐ Si on reçoit un historique de messages, on l'utilise
     const isChat = messages && Array.isArray(messages) && messages.length > 0;
 
-    // Pour le mode chat avec historique
     const dernierMessage = isChat
       ? messages[messages.length - 1].content
       : prompt || "";
@@ -55,7 +53,7 @@ export async function POST(req: Request) {
     const mode = manualMode || detectMode(dernierMessage);
     console.log("🎯 Mode :", mode, "| Messages :", isChat ? messages.length : "1");
 
-    // ═══ CHAT (avec historique complet) ═══
+    // ═══ CHAT ═══
     if (mode === "chat" || customSystemPrompt) {
       const systemPrompt = customSystemPrompt
         ? BARRY_IDENTITY + "\n\n" + customSystemPrompt
@@ -72,9 +70,6 @@ export async function POST(req: Request) {
         : provider === "together" ? togetherai("meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo")
         : groq("openai/gpt-oss-120b");
 
-      console.log("⚡ Streaming avec historique");
-
-      // ⭐ STREAMTEXT avec messages (historique)
       const result = streamText({
         model: modele,
         system: systemPrompt,
@@ -86,26 +81,79 @@ export async function POST(req: Request) {
 
     // ═══ DROPSHIPPING ═══
     if (mode === "dropshipping") {
-      let storeName = customization?.storeName || "Premium Store";
-      const tagline = "Decouvrez notre collection exclusive";
+      const storeName = customization?.storeName || "Ma Boutique";
+      const tagline = "Découvrez notre collection exclusive";
 
       const lower = dernierMessage.toLowerCase().replace(/[^\w\s]/g, " ");
       const cleaned = lower
-        .replace(/cree|creer|moi|une|un|des|de|du|d|la|le|les|boutique|shop|store|magasin|en ligne|pour|avec|sur/g, " ")
+        .replace(/cree|creer|moi|une|un|des|de|du|d|la|le|les|boutique|shop|store|magasin|en ligne|pour|avec|sur|dropshipping|vendre|veux/gi, " ")
         .replace(/\s+/g, " ")
         .trim();
-      const keyword = cleaned.split(" ").slice(0, 4).join(" ") || "produits varies";
+      const keyword = cleaned.split(" ").slice(0, 3).join(" ") || "produits varies";
+
+      const styles = ["modern", "luxury", "colorful", "minimal"] as const;
+      const style = styles[Math.floor(Math.random() * styles.length)];
 
       const { buildDropshippingSite } = await import("@/lib/dropshippingTemplate");
-      const html = buildDropshippingSite(storeName, tagline, keyword, customization?.color, customization?.mood);
-      return Response.json({ ok: true, text: "```html\n" + html + "\n```", mode: "dropshipping" });
+      const html = buildDropshippingSite(storeName, tagline, keyword, customization?.color, customization?.mood, style);
+
+      return Response.json({
+        ok: true,
+        text: "```html\n" + html + "\n```",
+        mode: "dropshipping",
+        style,
+        keyword,
+      });
     }
 
-    // ═══ CODE ═══
+    // ═══ CODE (sites, jeux, apps...) ═══
     if (mode === "code") {
       const result = streamText({
         model: groq("openai/gpt-oss-120b"),
-        system: BARRY_IDENTITY + "\n\nGenere un site/jeu/app complet en HTML/CSS/JS. Un seul fichier. Reponds UNIQUEMENT avec le code.",
+        system: BARRY_IDENTITY + `
+
+🎯 MISSION : Tu es un développeur web expert. Génère un site WEB COMPLET et PROFESSIONNEL.
+
+RÈGLES CRITIQUES :
+- Un SEUL fichier HTML avec tout dedans (CSS dans <style>, JS dans <script>)
+- MINIMUM 400 LIGNES de code — un vrai site, pas une démo
+- Design moderne avec animations, hover, responsive mobile
+- Utilise Tailwind CDN : <script src="https://cdn.tailwindcss.com"></script>
+- Police Google Fonts (Inter, Poppins, Playfair...)
+- Icônes SVG inline ou Lucide via CDN
+
+STRUCTURE OBLIGATOIRE pour un site vitrine (banque, école, restaurant, entreprise...) :
+1. HEADER sticky avec logo + navigation (Accueil, Services, À propos, Contact)
+2. HERO : grand titre accrocheur + sous-titre + 2 boutons CTA + image/illustration
+3. SECTION SERVICES : 3-6 cartes avec icônes, titres, descriptions
+4. SECTION À PROPOS : texte + image ou stats (chiffres clés)
+5. SECTION TÉMOIGNAGES ou AVANTAGES : 3 cartes
+6. SECTION CONTACT : formulaire (nom, email, message) + coordonnées
+7. FOOTER complet : liens, réseaux sociaux, copyright
+
+STRUCTURE pour un JEU :
+- Interface complète avec score, niveau, vies
+- Game over + restart fonctionnel
+- Contrôles clavier ET tactile (mobile)
+- Design soigné avec animations
+
+STRUCTURE pour un PORTFOLIO :
+- Hero avec photo + nom + titre
+- Section projets avec grid de cartes
+- Section compétences avec barres de progression
+- Section contact fonctionnelle
+
+CONTENU :
+- Textes RÉELS en français (pas "Lorem ipsum")
+- Noms d'entreprise crédibles
+- Coordonnées fictives mais réalistes (adresse, téléphone, email)
+- Images via https://images.unsplash.com/ ou placehold.co
+
+RÈGLES ABSOLUES :
+- Réponds UNIQUEMENT avec le code complet, entre \`\`\`html et \`\`\`
+- Commence DIRECTEMENT par <!DOCTYPE html>
+- AUCUN texte avant ou après le code
+- Pas de "Voici votre site" ni "J'espère que..."`,
         messages: isChat ? messages : [{ role: "user", content: dernierMessage }],
       });
       return result.toTextStreamResponse();

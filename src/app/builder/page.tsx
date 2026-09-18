@@ -5,6 +5,26 @@ import { Send, Sparkles, Code2, RefreshCw, Palette, X } from "lucide-react";
 
 type Message = { role: "user" | "assistant"; content: string };
 
+// ═══ Extraction robuste du HTML ═══
+function extractHtml(text: string): string {
+  if (!text) return "";
+  let match = text.match(/```html\s*\n([\s\S]*?)```/i);
+  if (match) return match[1].trim();
+  match = text.match(/```\s*\n([\s\S]*?)```/);
+  if (match) return match[1].trim();
+  match = text.match(/```html\s*\n([\s\S]*)$/i);
+  if (match) return match[1].trim();
+  match = text.match(/```\s*\n([\s\S]*)$/);
+  if (match) return match[1].trim();
+  let idx = text.indexOf("<!DOCTYPE");
+  if (idx !== -1) return text.slice(idx).trim();
+  idx = text.indexOf("<html");
+  if (idx !== -1) return text.slice(idx).trim();
+  idx = text.indexOf("<body");
+  if (idx !== -1) return "<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\"></head>\n" + text.slice(idx).trim();
+  return "";
+}
+
 const HTML_INITIAL = `<!DOCTYPE html>
 <html>
 <head>
@@ -51,6 +71,10 @@ export default function BuilderPage() {
   const [loading, setLoading] = useState(false);
   const [key, setKey] = useState(0);
 
+  const [currentProject, setCurrentProject] = useState<{ id: string; slug: string; published: boolean } | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [copied, setCopied] = useState(false);
+
   const [showCustomize, setShowCustomize] = useState(false);
   const [storePrompt, setStorePrompt] = useState("");
   const [storeName, setStoreName] = useState("");
@@ -77,7 +101,7 @@ export default function BuilderPage() {
   const generateSite = async (texte: string, customization: any) => {
     setMessages((prev) => [...prev, { role: "user", content: texte }]);
     setLoading(true);
-    setMessages((prev) => [...prev, { role: "assistant", content: "..." }]);
+    setMessages((prev) => [...prev, { role: "assistant", content: "⏳ Generation en cours..." }]);
 
     try {
       const res = await fetch("/api/generate", {
@@ -91,64 +115,115 @@ export default function BuilderPage() {
         }),
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get("content-type") || "";
+      const isJson = contentType.includes("application/json");
 
-      if (!data.ok) {
-        setMessages((prev) => {
-          const copie = [...prev];
-          copie[copie.length - 1] = { role: "assistant", content: "Erreur : " + data.error };
-          return copie;
-        });
+      let htmlExtrait = "";
+      let styleUsed: string | null = null;
+      let keywordUsed: string | null = null;
+
+      if (isJson) {
+        const data = await res.json();
+        if (!data.ok) {
+          setMessages((prev) => {
+            const copie = [...prev];
+            copie[copie.length - 1] = { role: "assistant", content: "Erreur : " + data.error };
+            return copie;
+          });
+          return;
+        }
+        styleUsed = data.style || null;
+        keywordUsed = data.keyword || null;
+        htmlExtrait = extractHtml(data.text);
       } else {
+        const reader = res.body?.getReader();
+        const decoder = new TextDecoder();
+        let fullText = "";
+
+        if (reader) {
+          let done = false;
+          while (!done) {
+            const { value, done: d } = await reader.read();
+            done = d;
+            if (value) fullText += decoder.decode(value, { stream: true });
+          }
+        }
+        htmlExtrait = extractHtml(fullText);
+      }
+
+      htmlExtrait = htmlExtrait.trim();
+
+      if (htmlExtrait && htmlExtrait.length > 50) {
+        setHtml(htmlExtrait);
+        setKey((k) => k + 1);
+
         setMessages((prev) => {
           const copie = [...prev];
           copie[copie.length - 1] = { role: "assistant", content: "✅ Site genere ! Regarde l'apercu." };
           return copie;
         });
 
-        let htmlExtrait = "";
-        const match = data.text.match(/```(?:html)?\s*\n?([\s\S]*?)```/);
-
-        if (match) htmlExtrait = match[1];
-        else {
-          const idx = data.text.indexOf("<!DOCTYPE");
-          if (idx === -1) {
-            const idx2 = data.text.indexOf("<html");
-            if (idx2 !== -1) htmlExtrait = data.text.slice(idx2);
-          } else {
-            htmlExtrait = data.text.slice(idx);
-          }
-        }
-
-               htmlExtrait = htmlExtrait.trim();
-        if (htmlExtrait) {
-          setHtml(htmlExtrait);
-          setKey((k) => k + 1);
-
-          // 💾 SAUVEGARDE AUTOMATIQUE
-          try {
-            const saveRes = await fetch("/api/projects/save", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                name: customization?.storeName || "Mon site",
-                prompt: texte,
-                html: htmlExtrait,
-                style: data.style || null,
-                category: data.keyword || null,
-                userId: null,
-              }),
+        // 💾 SAUVEGARDE AUTOMATIQUE
+        try {
+          const saveRes = await fetch("/api/projects/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: customization?.storeName || "Mon site",
+              prompt: texte,
+              html: htmlExtrait,
+              style: styleUsed,
+              category: keywordUsed,
+              userId: null,
+            }),
+          });
+          const saveData = await saveRes.json();
+          if (saveData.ok) {
+            console.log("✅ Site sauvegardé :", saveData.project.slug);
+            setCurrentProject({
+              id: saveData.project.id,
+              slug: saveData.project.slug,
+              published: false,
             });
-            const saveData = await saveRes.json();
-            if (saveData.ok) {
-              console.log("✅ Site sauvegardé :", saveData.project.slug);
-            } else {
-              console.warn("⚠️ Échec sauvegarde :", saveData.error);
-            }
-          } catch (saveErr) {
-            console.warn("⚠️ Erreur sauvegarde :", saveErr);
+            setMessages((prev) => {
+              const copie = [...prev];
+              copie[copie.length - 1] = {
+                role: "assistant",
+                content: "✅ Site genere et sauvegarde ! Tu peux le publier.",
+              };
+              return copie;
+            });
+          } else {
+            console.warn("⚠️ Échec sauvegarde :", saveData.error);
+            setMessages((prev) => {
+              const copie = [...prev];
+              copie[copie.length - 1] = {
+                role: "assistant",
+                content: "⚠️ Site genere mais sauvegarde echouee : " + saveData.error,
+              };
+              return copie;
+            });
           }
+        } catch (saveErr: any) {
+          console.warn("⚠️ Erreur sauvegarde :", saveErr);
+          setMessages((prev) => {
+            const copie = [...prev];
+            copie[copie.length - 1] = {
+              role: "assistant",
+              content: "⚠️ Site genere mais erreur sauvegarde : " + (saveErr?.message || String(saveErr)),
+            };
+            return copie;
+          });
         }
+      } else {
+        setMessages((prev) => {
+          const copie = [...prev];
+          copie[copie.length - 1] = {
+            role: "assistant",
+            content: "⚠️ Aucun site detecte. Reformule ta demande.",
+          };
+          return copie;
+        });
       }
     } catch (err: any) {
       setMessages((prev) => {
@@ -163,15 +238,50 @@ export default function BuilderPage() {
 
   const handleCustomizeSubmit = () => {
     if (!storeName.trim()) return;
-
     const customization = {
       storeName: storeName.trim(),
       color: COLORS.find((c) => c.id === selectedColor),
       mood: MOODS.find((m) => m.id === selectedMood),
     };
-
     setShowCustomize(false);
     generateSite(storePrompt, customization);
+  };
+
+  const handlePublish = async () => {
+    if (!currentProject || publishing) return;
+    setPublishing(true);
+    try {
+      const res = await fetch("/api/projects/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: currentProject.id,
+          published: !currentProject.published,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setCurrentProject({ ...currentProject, published: data.project.published });
+        console.log(
+          data.project.published ? "🚀 Site publié !" : "🔒 Site dépublié",
+          "/s/" + currentProject.slug
+        );
+      } else {
+        alert("Erreur : " + data.error);
+      }
+    } catch (err: any) {
+      alert("Erreur réseau : " + err.message);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const copyPublicUrl = () => {
+    if (!currentProject) return;
+    const url = window.location.origin + "/s/" + currentProject.slug;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -185,15 +295,12 @@ export default function BuilderPage() {
 
       {/* ═══ PANNEAU GAUCHE : CHAT ═══ */}
       <div className="w-2/5 flex flex-col rounded-3xl bg-white shadow-[0_8px_40px_rgba(251,146,60,0.15)] overflow-hidden">
-
         <div className="p-5 flex items-center gap-3 flex-shrink-0 border-b border-orange-100">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/30">
             <Sparkles className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="font-black tracking-widest text-sm text-zinc-900">
-              BUILDER
-            </h1>
+            <h1 className="font-black tracking-widest text-sm text-zinc-900">BUILDER</h1>
             <p className="text-[10px] text-zinc-500">Barry AI Studio</p>
           </div>
         </div>
@@ -255,14 +362,42 @@ export default function BuilderPage() {
             <Code2 className="w-3 h-3" />
             Apercu en direct
           </div>
-          <button
-            onClick={() => setKey((k) => k + 1)}
-            className="ml-auto flex items-center gap-1 text-xs text-orange-500 hover:bg-orange-50 px-3 py-1.5 rounded-xl transition-all font-medium"
-          >
-            <RefreshCw className="w-3 h-3" />
-            Recharger
-          </button>
+
+          {currentProject ? (
+            <div className="ml-auto flex items-center gap-2">
+              {currentProject.published && (
+                <button
+                  onClick={copyPublicUrl}
+                  className="flex items-center gap-1 text-xs text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-xl transition-all font-medium"
+                  title={"Lien : /s/" + currentProject.slug}
+                >
+                  {copied ? "✅ Copié !" : "🔗 Copier le lien"}
+                </button>
+              )}
+              <button
+                onClick={handlePublish}
+                disabled={publishing}
+                className={
+                  "flex items-center gap-1 text-xs px-3 py-1.5 rounded-xl transition-all font-bold " +
+                  (currentProject.published
+                    ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                    : "bg-gradient-to-r from-yellow-400 to-orange-500 text-white hover:from-yellow-300 hover:to-orange-400")
+                }
+              >
+                {publishing ? "⏳..." : currentProject.published ? "🌐 Publié" : "🚀 Publier"}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setKey((k) => k + 1)}
+              className="ml-auto flex items-center gap-1 text-xs text-orange-500 hover:bg-orange-50 px-3 py-1.5 rounded-xl transition-all font-medium"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Recharger
+            </button>
+          )}
         </div>
+
         <div className="flex-1 bg-white">
           <iframe
             key={key}
@@ -278,9 +413,7 @@ export default function BuilderPage() {
       {showCustomize && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-md p-4 overflow-y-auto">
           <div className="relative w-full max-w-2xl my-8 p-8 rounded-3xl bg-white shadow-[0_20px_80px_rgba(251,146,60,0.25)] overflow-hidden">
-
             <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-[500px] h-[500px] rounded-full bg-gradient-to-br from-yellow-200 via-orange-200 to-amber-100 blur-[110px] opacity-60" />
-
             <button
               onClick={() => setShowCustomize(false)}
               className="absolute top-5 right-5 z-10 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl p-1.5 transition-all"
@@ -289,7 +422,6 @@ export default function BuilderPage() {
             </button>
 
             <div className="relative z-10">
-
               <div className="text-center mb-8">
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-gradient-to-br from-yellow-400 to-orange-500 mb-4 shadow-xl shadow-orange-500/30">
                   <Palette className="w-8 h-8 text-white" />
@@ -297,15 +429,11 @@ export default function BuilderPage() {
                 <h2 className="text-3xl font-black mb-2 text-zinc-900">
                   Personnalise ta <span className="bg-gradient-to-r from-yellow-500 to-orange-500 bg-clip-text text-transparent">boutique</span>
                 </h2>
-                <p className="text-zinc-500 text-sm">
-                  Cree une boutique 100% unique selon tes gouts
-                </p>
+                <p className="text-zinc-500 text-sm">Cree une boutique 100% unique selon tes gouts</p>
               </div>
 
               <div className="mb-6">
-                <label className="block text-sm text-zinc-800 font-bold mb-2">
-                  🏷️ Nom de ta boutique
-                </label>
+                <label className="block text-sm text-zinc-800 font-bold mb-2">🏷️ Nom de ta boutique</label>
                 <input
                   type="text"
                   value={storeName}
@@ -317,9 +445,7 @@ export default function BuilderPage() {
               </div>
 
               <div className="mb-6">
-                <label className="block text-sm text-zinc-800 font-bold mb-3">
-                  🎨 Couleur principale
-                </label>
+                <label className="block text-sm text-zinc-800 font-bold mb-3">🎨 Couleur principale</label>
                 <div className="grid grid-cols-4 gap-2">
                   {COLORS.map((c) => (
                     <button
@@ -336,18 +462,14 @@ export default function BuilderPage() {
                         className="w-8 h-8 rounded-full shadow-md"
                         style={{ background: "linear-gradient(135deg, " + c.primary + ", " + c.secondary + ")" }}
                       />
-                      <span className="text-[10px] text-zinc-600 text-center">
-                        {c.name}
-                      </span>
+                      <span className="text-[10px] text-zinc-600 text-center">{c.name}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
               <div className="mb-8">
-                <label className="block text-sm text-zinc-800 font-bold mb-3">
-                  ✨ Ambiance
-                </label>
+                <label className="block text-sm text-zinc-800 font-bold mb-3">✨ Ambiance</label>
                 <div className="grid grid-cols-2 gap-2">
                   {MOODS.map((m) => (
                     <button
@@ -360,12 +482,8 @@ export default function BuilderPage() {
                           : "border-zinc-100 hover:border-orange-200 bg-white")
                       }
                     >
-                      <div className="font-bold text-zinc-900 text-sm mb-1">
-                        {m.name}
-                      </div>
-                      <div className="text-[11px] text-zinc-500">
-                        {m.desc}
-                      </div>
+                      <div className="font-bold text-zinc-900 text-sm mb-1">{m.name}</div>
+                      <div className="text-[11px] text-zinc-500">{m.desc}</div>
                     </button>
                   ))}
                 </div>
@@ -386,7 +504,6 @@ export default function BuilderPage() {
                   ✨ Generer ma boutique
                 </button>
               </div>
-
             </div>
           </div>
         </div>
