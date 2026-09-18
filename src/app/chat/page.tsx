@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Send, Sparkles, Zap, Trash2 } from "lucide-react";
+import { Send, Sparkles, Trash2, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { loadChat, saveChat, clearChat, PAGE_KEYS, type ChatMessage } from "@/lib/chatHistory";
@@ -10,8 +10,7 @@ type Message = ChatMessage;
 
 const MESSAGE_INITIAL: Message = {
   role: "assistant",
-  content:
-    "Bonjour ! Je suis **BARRY AI** 🧠\n\nJe me souviens de TOUTE notre conversation pendant 1 heure.\n\nPose-moi n'importe quelle question !",
+  content: "Bonjour ! Pose-moi n'importe quelle question.",
 };
 
 function cleanMarkdown(text: string): string {
@@ -32,21 +31,18 @@ export default function ChatPage() {
   const [mounted, setMounted] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Charger l'historique au démarrage
   useEffect(() => {
     const saved = loadChat(PAGE_KEYS.CHAT);
     if (saved.length > 0) setMessages(saved);
     setMounted(true);
   }, []);
 
-  // Sauvegarder automatiquement
   useEffect(() => {
     if (mounted && messages.length > 0) {
       saveChat(PAGE_KEYS.CHAT, messages);
     }
   }, [messages, mounted]);
 
-  // Scroll auto
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: "smooth" });
@@ -72,7 +68,6 @@ export default function ChatPage() {
     setMessages(nouveauxMessages);
     setInput("");
     setLoading(true);
-
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
@@ -85,7 +80,7 @@ export default function ChatPage() {
         }),
       });
 
-      if (!res.body) throw new Error("Pas de reponse");
+      if (!res.body) throw new Error("Pas de réponse");
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -121,123 +116,122 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-stone-100 via-amber-50 to-stone-100">
+    <div className="min-h-screen flex flex-col bg-white">
 
-      {/* HEADER */}
-      <div className="border-b border-stone-300 bg-stone-100/90 backdrop-blur-md sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center shadow-lg">
-            <Sparkles className="w-5 h-5 text-white" />
+      <header className="h-14 border-b border-zinc-200/80 bg-white/80 backdrop-blur-md sticky top-0 z-10">
+        <div className="max-w-3xl mx-auto h-full px-5 flex items-center gap-3">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center">
+            <Sparkles className="w-3.5 h-3.5 text-white" />
           </div>
           <div className="flex-1">
-            <h1 className="text-xl font-black text-stone-900 tracking-wide">BARRY AI</h1>
-            <p className="text-xs text-stone-600 flex items-center gap-1">
-              <Zap className="w-3 h-3" />
-              Chat intelligent · Mémoire 1h
-            </p>
+            <h1 className="text-[14px] font-semibold text-zinc-900 tracking-tight">Chat IA</h1>
           </div>
           <button
             onClick={handleClear}
-            className="flex items-center gap-1.5 text-xs text-stone-500 hover:text-red-600 hover:bg-red-50 px-3 py-2 rounded-xl transition-all"
-            title="Effacer la conversation"
+            className="w-8 h-8 rounded-lg hover:bg-zinc-100 flex items-center justify-center text-zinc-400 hover:text-red-500 transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            Effacer
           </button>
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-5 py-8">
+          {messages.map((msg, i) => (
+            <div key={i} className="mb-6 last:mb-0">
+              {msg.role === "user" ? (
+                <div className="flex justify-end">
+                  <div className="max-w-[85%] bg-zinc-100 rounded-3xl px-5 py-2.5 text-[15px] leading-[1.7] text-zinc-900 whitespace-pre-wrap break-words">
+                    {msg.content}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-4">
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Sparkles className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div
+                      className="text-[15px] leading-[1.75] text-zinc-800 break-words
+                        [&_h1]:text-zinc-900 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:mt-4 [&_h1]:mb-2 [&_h1]:tracking-tight
+                        [&_h2]:text-zinc-900 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:tracking-tight
+                        [&_h3]:text-zinc-900 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:mt-4 [&_h3]:mb-1
+                        [&_p]:mb-3 [&_p]:leading-[1.75]
+                        [&_strong]:text-zinc-900 [&_strong]:font-semibold
+                        [&_em]:italic
+                        [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-3 [&_ul]:space-y-1
+                        [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-3 [&_ol]:space-y-1
+                        [&_li]:leading-[1.75]
+                        [&_code]:bg-zinc-100 [&_code]:text-zinc-800 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[13px] [&_code]:font-mono
+                        [&_pre]:bg-zinc-900 [&_pre]:text-zinc-100 [&_pre]:p-4 [&_pre]:rounded-xl [&_pre]:overflow-x-auto [&_pre]:my-3 [&_pre]:text-[13px]
+                        [&_pre_code]:bg-transparent [&_pre_code]:text-zinc-100 [&_pre_code]:p-0
+                        [&_a]:text-orange-600 [&_a]:underline
+                        [&_blockquote]:border-l-2 [&_blockquote]:border-zinc-300 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-3 [&_blockquote]:text-zinc-600
+                        [&_table]:hidden
+                        [&_hr]:border-zinc-200 [&_hr]:my-5"
+                    >
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+
+                    {loading &&
+                      i === messages.length - 1 &&
+                      msg.role === "assistant" &&
+                      !msg.content && (
+                        <div className="flex items-center gap-2 text-zinc-400">
+                          <div className="flex gap-1">
+                            <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                            <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                            <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          <div ref={scrollRef} />
         </div>
       </div>
 
-      {/* MESSAGES */}
-      <div className="flex-1 max-w-4xl mx-auto w-full px-6 py-6 space-y-5 overflow-y-auto">
-        {messages.map((msg, i) => (
-          <div key={i} className="flex gap-3 min-w-0">
-            <div
-              className={
-                "w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-black shadow-md " +
-                (msg.role === "user"
-                  ? "bg-stone-800 text-yellow-400"
-                  : "bg-gradient-to-br from-yellow-400 to-amber-500 text-white")
-              }
-            >
-              {msg.role === "user" ? "Moi" : "B"}
-            </div>
-
-            <div
-              className={
-                "flex-1 min-w-0 p-4 rounded-2xl text-sm break-words shadow-sm " +
-                (msg.role === "user"
-                  ? "bg-stone-800 text-yellow-50"
-                  : "bg-stone-50 border border-stone-200 text-stone-800")
-              }
-            >
-              {msg.role === "user" ? (
-                <p className="whitespace-pre-wrap break-words">{msg.content}</p>
-              ) : (
-                <div
-                  className="
-                    break-words
-                    [&_h1]:text-amber-800 [&_h1]:text-xl [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2
-                    [&_h2]:text-amber-800 [&_h2]:text-lg [&_h2]:font-bold [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:border-b [&_h2]:border-stone-200 [&_h2]:pb-1
-                    [&_h3]:text-orange-700 [&_h3]:text-base [&_h3]:font-bold [&_h3]:mt-4 [&_h3]:mb-1
-                    [&_p]:mb-2 [&_p]:leading-relaxed [&_p]:text-stone-700
-                    [&_strong]:text-stone-900 [&_strong]:font-bold
-                    [&_em]:italic
-                    [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-3
-                    [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-3
-                    [&_li]:leading-relaxed [&_li]:text-stone-700 [&_li]:marker:text-amber-500
-                    [&_code]:bg-amber-100 [&_code]:text-amber-900 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[0.85em]
-                    [&_pre]:bg-stone-900 [&_pre]:text-yellow-100 [&_pre]:p-3 [&_pre]:rounded-lg [&_pre]:overflow-x-auto [&_pre]:my-3 [&_pre]:text-xs
-                    [&_a]:text-amber-700 [&_a]:underline
-                    [&_table]:hidden
-                  "
-                >
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {msg.content}
-                  </ReactMarkdown>
-                </div>
-              )}
-
-              {loading &&
-                i === messages.length - 1 &&
-                msg.role === "assistant" &&
-                !msg.content && (
-                  <span className="text-amber-600 italic flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                    BARRY réfléchit...
-                  </span>
-                )}
-            </div>
-          </div>
-        ))}
-        <div ref={scrollRef} />
-      </div>
-
-      {/* SAISIE */}
-      <div className="sticky bottom-0 border-t border-stone-300 bg-stone-100/90 backdrop-blur-md">
-        <div className="max-w-4xl mx-auto w-full px-6 py-4">
-          <div className="flex gap-2 bg-stone-50 border-2 border-stone-300 rounded-2xl p-2 focus-within:border-amber-500 transition-colors shadow-lg">
-            <input
+      <div className="sticky bottom-0 bg-gradient-to-t from-white via-white to-transparent pt-6">
+        <div className="max-w-3xl mx-auto px-5 pb-6">
+          <div className="flex items-end gap-2 bg-white rounded-3xl border border-zinc-200 shadow-[0_2px_15px_rgba(0,0,0,0.04)] focus-within:border-zinc-400 focus-within:shadow-[0_4px_25px_rgba(0,0,0,0.08)] transition-all p-2">
+            <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-              placeholder="Posez votre question..."
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Pose ta question..."
               disabled={loading}
-              className="flex-1 min-w-0 bg-transparent px-3 py-2 text-sm outline-none text-stone-900 placeholder-stone-500 disabled:opacity-50"
+              rows={1}
+              className="flex-1 bg-transparent px-3 py-2 text-[15px] outline-none resize-none placeholder-zinc-400 text-zinc-900 leading-[1.6]"
+              style={{ maxHeight: "160px" }}
             />
             <button
               onClick={handleSend}
               disabled={loading || !input.trim()}
-              className="bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl px-5 py-2 flex items-center gap-2 text-sm transition-all shadow-lg"
+              className="w-9 h-9 rounded-full bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-200 disabled:cursor-not-allowed flex items-center justify-center transition-colors flex-shrink-0"
             >
-              <Send className="w-4 h-4" />
-              Envoyer
+              {loading ? (
+                <Loader2 className="w-4 h-4 text-white animate-spin" />
+              ) : (
+                <Send className="w-4 h-4 text-white" />
+              )}
             </button>
           </div>
-          <p className="text-center text-xs text-stone-500 mt-2">
-            L'historique est conservé pendant 1 heure
+          <p className="text-[11px] text-zinc-400 mt-3 text-center">
+            BARRY AI peut faire des erreurs.
           </p>
         </div>
       </div>
+
     </div>
   );
 }

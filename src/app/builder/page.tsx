@@ -2,30 +2,46 @@
 
 import { useState, useEffect, useRef } from "react";
 import {
-  Send, Sparkles, Code2, RefreshCw, Palette, X, Trash2,
+  Send, Sparkles, RefreshCw, X, Trash2,
   Download, Rocket, Link2, Check, Globe, Loader2,
 } from "lucide-react";
 import { loadChat, saveChat, clearChat, PAGE_KEYS, type ChatMessage } from "@/lib/chatHistory";
 
 type Message = ChatMessage;
 
+type ProjectState = {
+  type: "site" | "boutique" | "jeu" | "app" | "portfolio" | null;
+  name: string;
+  description: string;
+  color: string;
+  mood: string;
+  ready: boolean;
+};
+
 function extractHtml(text: string): string {
   if (!text) return "";
-  let match = text.match(/```html\s*\n([\s\S]*?)```/i);
-  if (match) return match[1].trim();
-  match = text.match(/```\s*\n([\s\S]*?)```/);
-  if (match) return match[1].trim();
-  match = text.match(/```html\s*\n([\s\S]*)$/i);
-  if (match) return match[1].trim();
-  match = text.match(/```\s*\n([\s\S]*)$/);
-  if (match) return match[1].trim();
-  let idx = text.indexOf("<!DOCTYPE");
-  if (idx !== -1) return text.slice(idx).trim();
-  idx = text.indexOf("<html");
-  if (idx !== -1) return text.slice(idx).trim();
-  idx = text.indexOf("<body");
-  if (idx !== -1) return "<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\"></head>\n" + text.slice(idx).trim();
-  return "";
+
+  let cleaned = text.trim();
+
+  if (cleaned.startsWith("```html")) {
+    cleaned = cleaned.replace(/^```html\s*\n?/i, "");
+  } else if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```\s*\n?/, "");
+  }
+
+  cleaned = cleaned.replace(/```\s*$/g, "").trim();
+
+  const idxDoctype = cleaned.indexOf("<!DOCTYPE");
+  const idxHtml = cleaned.indexOf("<html");
+  const idxBody = cleaned.indexOf("<body");
+
+  if (idxDoctype !== -1) return cleaned.slice(idxDoctype).trim();
+  if (idxHtml !== -1) return cleaned.slice(idxHtml).trim();
+  if (idxBody !== -1) {
+    return `<!DOCTYPE html>\n<html>\n<head><meta charset="utf-8"></head>\n${cleaned.slice(idxBody).trim()}`;
+  }
+
+  return cleaned;
 }
 
 const HTML_INITIAL = `<!DOCTYPE html>
@@ -34,7 +50,7 @@ const HTML_INITIAL = `<!DOCTYPE html>
 <meta charset="utf-8">
 <title>BARRY AI</title>
 <style>
-  body { margin:0; font-family:system-ui,sans-serif; background:#fafafa; color:#1a1a1a;
+  body { margin:0; font-family:Inter,system-ui,sans-serif; background:#fafafa; color:#1a1a1a;
          min-height:100vh; display:flex; flex-direction:column;
          align-items:center; justify-content:center; text-align:center; padding:40px; }
   .logo { font-size:56px; font-weight:900; letter-spacing:-2px;
@@ -51,26 +67,8 @@ const HTML_INITIAL = `<!DOCTYPE html>
 
 const MESSAGE_INITIAL: Message = {
   role: "assistant",
-  content: "Bonjour ! Je suis BARRY AI.\n\nDécris ce que tu veux créer :\n\n• Une boutique e-commerce\n• Un site web\n• Un jeu\n• Un portfolio\n• Une application",
+  content: "Bonjour ! Dis-moi ce que tu veux créer : un site web, une boutique, un jeu, une app ou un portfolio ?",
 };
-
-const COLORS = [
-  { id: "yellow", name: "Jaune Doré", primary: "#facc15", secondary: "#f59e0b" },
-  { id: "purple", name: "Violet", primary: "#a855f7", secondary: "#7c3aed" },
-  { id: "blue", name: "Bleu", primary: "#3b82f6", secondary: "#2563eb" },
-  { id: "green", name: "Vert", primary: "#22c55e", secondary: "#16a34a" },
-  { id: "pink", name: "Rose", primary: "#ec4899", secondary: "#db2777" },
-  { id: "red", name: "Rouge", primary: "#ef4444", secondary: "#dc2626" },
-  { id: "orange", name: "Orange", primary: "#f97316", secondary: "#ea580c" },
-  { id: "cyan", name: "Cyan", primary: "#06b6d4", secondary: "#0891b2" },
-];
-
-const MOODS = [
-  { id: "dark-luxury", name: "Luxe sombre", desc: "Élégant et premium" },
-  { id: "light-minimal", name: "Minimaliste clair", desc: "Simple et épuré" },
-  { id: "vibrant", name: "Vibrant", desc: "Couleurs vives" },
-  { id: "vintage", name: "Vintage", desc: "Rétro et chaleureux" },
-];
 
 export default function BuilderPage() {
   const [messages, setMessages] = useState<Message[]>([MESSAGE_INITIAL]);
@@ -85,11 +83,14 @@ export default function BuilderPage() {
   const [publishing, setPublishing] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const [showCustomize, setShowCustomize] = useState(false);
-  const [storePrompt, setStorePrompt] = useState("");
-  const [storeName, setStoreName] = useState("");
-  const [selectedColor, setSelectedColor] = useState("yellow");
-  const [selectedMood, setSelectedMood] = useState("dark-luxury");
+  const [projectState, setProjectState] = useState<ProjectState>({
+    type: null,
+    name: "",
+    description: "",
+    color: "",
+    mood: "",
+    ready: false,
+  });
 
   useEffect(() => {
     const saved = loadChat(PAGE_KEYS.BUILDER);
@@ -99,7 +100,7 @@ export default function BuilderPage() {
 
   useEffect(() => {
     if (mounted && messages.length > 0) {
-      saveChat(PAGE_KEYS.BUILDER, messages);
+      saveChat(PAGE_KEYS.BUILDER, messages.map((m) => ({ role: m.role, content: m.content })));
     }
   }, [messages, mounted]);
 
@@ -114,40 +115,174 @@ export default function BuilderPage() {
       clearChat(PAGE_KEYS.BUILDER);
       setMessages([MESSAGE_INITIAL]);
       setCurrentProject(null);
+      setProjectState({
+        type: null,
+        name: "",
+        description: "",
+        color: "",
+        mood: "",
+        ready: false,
+      });
     }
+  };
+
+  const detectType = (text: string): ProjectState["type"] => {
+    const t = text.toLowerCase();
+    if (/boutique|shop|e-?commerce|dropshipping|vendre|magasin/.test(t)) return "boutique";
+    if (/jeu|game|snake|pong|tetris|arcade/.test(t)) return "jeu";
+    if (/app|application|calculatrice|todo|outil/.test(t)) return "app";
+    if (/portfolio|photographe|designer/.test(t)) return "portfolio";
+    if (/site|page|vitrine|landing/.test(t)) return "site";
+    return null;
   };
 
   const handleSend = async () => {
     const texte = input.trim();
     if (!texte || loading) return;
 
-    const isShop = /boutique|shop|e-?commerce|dropshipping|store|magasin|vendre/i.test(texte);
+    const userMsg: Message = { role: "user", content: texte };
+    setMessages((prev) => [...prev, userMsg]);
+    setInput("");
 
-    if (isShop) {
-      setStorePrompt(texte);
-      setStoreName("");
-      setShowCustomize(true);
-      setInput("");
+    // ─── ÉTAPE 1 : Détecter le type ───
+    if (!projectState.type) {
+      const detectedType = detectType(texte);
+
+      if (detectedType) {
+        setProjectState((prev) => ({ ...prev, type: detectedType, description: texte }));
+
+        let question = "";
+        if (detectedType === "boutique") {
+          question = "Super ! Une boutique e-commerce.\n\nComment veux-tu l'appeler ?";
+        } else if (detectedType === "jeu") {
+          question = "Parfait ! Un jeu.\n\nQuel type de jeu ? (snake, pong, tetris, plateforme, quiz...)";
+        } else if (detectedType === "site") {
+          question = "Excellent ! Un site web.\n\nComment veux-tu l'appeler ?";
+        } else if (detectedType === "app") {
+          question = "Génial ! Une application.\n\nQuel type d'app ? (calculatrice, todo, timer, convertisseur...)";
+        } else if (detectedType === "portfolio") {
+          question = "Super ! Un portfolio.\n\nQuel est ton nom ou ton métier ?";
+        }
+
+        setMessages((prev) => [...prev, { role: "assistant", content: question }]);
+        return;
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Je peux t'aider à créer :\n\n• Un site web\n• Une boutique e-commerce\n• Un jeu\n• Une application\n• Un portfolio\n\nDis-moi ce que tu veux !",
+        },
+      ]);
       return;
     }
 
-    await generateSite(texte, null);
+    // ─── ÉTAPE 2 : Attendre le nom ───
+    if (projectState.type && !projectState.name) {
+      if (projectState.type === "jeu") {
+        setProjectState((prev) => ({ ...prev, name: texte }));
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `Parfait, un jeu de ${texte} !\n\nQuelle ambiance ? (sombre, coloré, rétro, minimaliste)`,
+          },
+        ]);
+        return;
+      }
+
+      setProjectState((prev) => ({ ...prev, name: texte, description: prev.description + " — " + texte }));
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `"${texte}" noté !\n\nQuelle couleur principale ? (rouge, bleu, vert, jaune, violet, orange, rose, noir)`,
+        },
+      ]);
+      return;
+    }
+
+    // ─── ÉTAPE 3 : Attendre la couleur ───
+    if (projectState.name && !projectState.color) {
+      setProjectState((prev) => ({ ...prev, color: texte }));
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `Couleur "${texte}" choisie.\n\nQuelle ambiance ? (moderne, élégant, minimaliste, vibrant, vintage)`,
+        },
+      ]);
+      return;
+    }
+
+    // ─── ÉTAPE 4 : Attendre l'ambiance → GÉNÉRER ───
+    if (projectState.color && !projectState.mood) {
+      const finalState: ProjectState = {
+        ...projectState,
+        mood: texte,
+        ready: true,
+      };
+      setProjectState(finalState);
+
+      const typeLabel =
+        finalState.type === "boutique" ? "boutique" :
+        finalState.type === "jeu" ? "jeu" :
+        finalState.type === "app" ? "application" :
+        finalState.type === "portfolio" ? "portfolio" : "site";
+
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `Parfait ! Je génère ton ${typeLabel}...` },
+      ]);
+
+      await generateFinalSite(finalState);
+      return;
+    }
+
+    setProjectState((prev) => ({ ...prev, ready: true }));
+    await generateFinalSite(projectState);
   };
 
-  const generateSite = async (texte: string, customization: any) => {
-    setMessages((prev) => [...prev, { role: "user", content: texte }]);
+  const generateFinalSite = async (state: ProjectState) => {
     setLoading(true);
-    setMessages((prev) => [...prev, { role: "assistant", content: "⏳ Génération en cours..." }]);
+
+    let cleanName = state.name.trim();
+    if (cleanName.length > 30) cleanName = cleanName.slice(0, 30).trim();
+
+    let prompt = `Crée `;
+
+    if (state.type === "boutique") {
+      prompt += `une boutique e-commerce nommée "${cleanName}". `;
+    } else if (state.type === "jeu") {
+      prompt += `un jeu de type "${cleanName}". `;
+    } else if (state.type === "app") {
+      prompt += `une application : "${cleanName}". `;
+    } else if (state.type === "portfolio") {
+      prompt += `un portfolio pour "${cleanName}". `;
+    } else {
+      prompt += `un site web nommé "${cleanName}". `;
+    }
+
+    if (state.color) prompt += `Couleur principale : ${state.color}. `;
+    if (state.mood) prompt += `Ambiance : ${state.mood}. `;
+    if (state.description) prompt += `Contexte : ${state.description}.`;
+
+    console.log("🎯 Prompt final :", prompt);
 
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: texte,
+          prompt,
           provider: "groq",
-          mode: customization ? "dropshipping" : undefined,
-          customization,
+          mode: state.type === "boutique" ? "dropshipping" : undefined,
+          customization: state.type === "boutique" ? {
+            storeName: cleanName,
+            color: { primary: state.color, secondary: state.color },
+            mood: { id: state.mood, name: state.mood },
+          } : undefined,
         }),
       });
 
@@ -155,21 +290,16 @@ export default function BuilderPage() {
       const isJson = contentType.includes("application/json");
 
       let htmlExtrait = "";
-      let styleUsed: string | null = null;
-      let keywordUsed: string | null = null;
 
       if (isJson) {
         const data = await res.json();
         if (!data.ok) {
-          setMessages((prev) => {
-            const copie = [...prev];
-            copie[copie.length - 1] = { role: "assistant", content: "Erreur : " + data.error };
-            return copie;
-          });
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: "Erreur : " + data.error },
+          ]);
           return;
         }
-        styleUsed = data.style || null;
-        keywordUsed = data.keyword || null;
         htmlExtrait = extractHtml(data.text);
       } else {
         const reader = res.body?.getReader();
@@ -197,11 +327,11 @@ export default function BuilderPage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              name: customization?.storeName || "Mon site",
-              prompt: texte,
+              name: state.name,
+              prompt,
               html: htmlExtrait,
-              style: styleUsed,
-              category: keywordUsed,
+              style: state.mood,
+              category: state.type,
               userId: null,
             }),
           });
@@ -212,64 +342,41 @@ export default function BuilderPage() {
               slug: saveData.project.slug,
               published: false,
             });
-            setMessages((prev) => {
-              const copie = [...prev];
-              copie[copie.length - 1] = {
-                role: "assistant",
-                content: "✅ Site généré et sauvegardé ! Tu peux le publier ou le télécharger.",
-              };
-              return copie;
-            });
-          } else {
-            setMessages((prev) => {
-              const copie = [...prev];
-              copie[copie.length - 1] = {
-                role: "assistant",
-                content: "✅ Site généré ! (Sauvegarde cloud indisponible)",
-              };
-              return copie;
-            });
           }
-        } catch {
-          setMessages((prev) => {
-            const copie = [...prev];
-            copie[copie.length - 1] = {
-              role: "assistant",
-              content: "✅ Site généré ! Tu peux le télécharger.",
-            };
-            return copie;
-          });
+        } catch (err) {
+          console.warn("Sauvegarde échouée:", err);
         }
-      } else {
-        setMessages((prev) => {
-          const copie = [...prev];
-          copie[copie.length - 1] = {
+
+        const typeLabel =
+          state.type === "boutique" ? "boutique" :
+          state.type === "jeu" ? "jeu" :
+          state.type === "app" ? "application" :
+          state.type === "portfolio" ? "portfolio" : "site";
+
+        setMessages((prev) => [
+          ...prev,
+          {
             role: "assistant",
-            content: "⚠️ Aucun site détecté. Reformule ta demande.",
-          };
-          return copie;
-        });
+            content: `C'est prêt ! Ton ${typeLabel} "${state.name}" est généré.\n\nRegarde l'aperçu à droite. Tu veux modifier quelque chose ?`,
+          },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "Je n'ai pas réussi à générer. Reformule ta demande.",
+          },
+        ]);
       }
     } catch (err: any) {
-      setMessages((prev) => {
-        const copie = [...prev];
-        copie[copie.length - 1] = { role: "assistant", content: "Erreur réseau : " + err.message };
-        return copie;
-      });
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Erreur réseau : " + err.message },
+      ]);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleCustomizeSubmit = () => {
-    if (!storeName.trim()) return;
-    const customization = {
-      storeName: storeName.trim(),
-      color: COLORS.find((c) => c.id === selectedColor),
-      mood: MOODS.find((m) => m.id === selectedMood),
-    };
-    setShowCustomize(false);
-    generateSite(storePrompt, customization);
   };
 
   const handlePublish = async () => {
@@ -306,7 +413,7 @@ export default function BuilderPage() {
   };
 
   const downloadHtml = () => {
-    const siteName = storeName?.trim() || "mon-site";
+    const siteName = projectState.name?.trim() || "mon-site";
     const fileName = siteName
       .toLowerCase()
       .normalize("NFD")
@@ -327,58 +434,64 @@ export default function BuilderPage() {
   };
 
   return (
-    <div className="h-screen flex bg-[#fafaf9]">
+    <div className="h-screen flex bg-white">
 
-      {/* ═══ SIDEBAR : CHAT ═══ */}
-      <aside className="w-[380px] flex flex-col bg-white border-r border-zinc-200/80">
+      {/* SIDEBAR CHAT */}
+      <aside className="w-[420px] flex flex-col bg-white border-r border-zinc-200/80">
 
-        {/* Header */}
-        <div className="h-16 px-5 flex items-center gap-3 border-b border-zinc-100">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-sm shadow-orange-500/30">
-            <Sparkles className="w-4.5 h-4.5 text-white" />
+        <div className="h-14 px-5 flex items-center gap-3 border-b border-zinc-200/80">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center">
+            <Sparkles className="w-3.5 h-3.5 text-white" />
           </div>
           <div className="flex-1">
-            <h1 className="text-[13px] font-semibold text-zinc-900 leading-tight">
-              BARRY Builder
-            </h1>
-            <p className="text-[11px] text-zinc-400">IA générative</p>
+            <h1 className="text-[14px] font-semibold text-zinc-900 tracking-tight">Builder</h1>
           </div>
           <button
             onClick={handleClear}
             className="w-8 h-8 rounded-lg hover:bg-zinc-100 flex items-center justify-center text-zinc-400 hover:text-red-500 transition-colors"
-            title="Effacer la conversation"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+        <div className="flex-1 overflow-y-auto">
           {messages.map((msg, i) => (
-            <div key={i} className={`flex gap-2.5 ${msg.role === "user" ? "justify-end" : ""}`}>
-              {msg.role === "assistant" && (
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center flex-shrink-0 shadow-sm">
-                  <Sparkles className="w-3.5 h-3.5 text-white" />
+            <div key={i}>
+              {msg.role === "user" ? (
+                <div className="px-5 py-4 flex justify-end">
+                  <div className="max-w-[85%] bg-zinc-100 rounded-3xl px-5 py-2.5 text-[15px] leading-[1.7] text-zinc-900 whitespace-pre-wrap break-words">
+                    {msg.content}
+                  </div>
+                </div>
+              ) : (
+                <div className="px-5 py-4 flex gap-3">
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Sparkles className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[15px] leading-[1.75] text-zinc-800 whitespace-pre-wrap break-words">
+                      {msg.content}
+                    </div>
+                    {loading &&
+                      i === messages.length - 1 &&
+                      msg.role === "assistant" &&
+                      !msg.content && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                          <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                        </div>
+                      )}
+                  </div>
                 </div>
               )}
-              <div
-                className={
-                  "max-w-[85%] rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed " +
-                  (msg.role === "user"
-                    ? "bg-zinc-900 text-white"
-                    : "bg-zinc-100 text-zinc-800")
-                }
-              >
-                <p className="whitespace-pre-wrap">{msg.content}</p>
-              </div>
             </div>
           ))}
           <div ref={scrollRef} />
         </div>
 
-        {/* Input */}
-        <div className="p-4 border-t border-zinc-100">
-          <div className="flex items-end gap-2 bg-zinc-50 rounded-2xl border border-zinc-200 focus-within:border-zinc-900 focus-within:bg-white transition-all p-2">
+        <div className="p-4 border-t border-zinc-200/80">
+          <div className="flex items-end gap-2 bg-white rounded-3xl border border-zinc-200 shadow-[0_2px_15px_rgba(0,0,0,0.04)] focus-within:border-zinc-400 transition-all p-1.5">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -388,72 +501,58 @@ export default function BuilderPage() {
                   handleSend();
                 }
               }}
-              placeholder="Décris ton projet..."
+              placeholder="Réponds ici..."
               disabled={loading}
               rows={1}
-              className="flex-1 bg-transparent px-2 py-1.5 text-[13px] outline-none resize-none placeholder-zinc-400 text-zinc-900"
+              className="flex-1 bg-transparent px-3 py-2 text-[15px] outline-none resize-none placeholder-zinc-400 text-zinc-900 leading-[1.6]"
               style={{ maxHeight: "120px" }}
             />
             <button
               onClick={handleSend}
               disabled={loading || !input.trim()}
-              className="w-8 h-8 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-300 disabled:cursor-not-allowed flex items-center justify-center transition-colors flex-shrink-0"
+              className="w-9 h-9 rounded-full bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-200 disabled:cursor-not-allowed flex items-center justify-center transition-colors flex-shrink-0"
             >
               {loading ? (
-                <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                <Loader2 className="w-4 h-4 text-white animate-spin" />
               ) : (
-                <Send className="w-3.5 h-3.5 text-white" />
+                <Send className="w-4 h-4 text-white" />
               )}
             </button>
           </div>
-          <p className="text-[10px] text-zinc-400 mt-2 text-center">
-            Entrée pour envoyer · Maj+Entrée pour nouvelle ligne
-          </p>
         </div>
       </aside>
 
-      {/* ═══ ZONE PRINCIPALE : APERÇU ═══ */}
+      {/* MAIN */}
       <main className="flex-1 flex flex-col min-w-0">
-
-        {/* Toolbar */}
-        <header className="h-16 px-6 flex items-center gap-3 border-b border-zinc-200/80 bg-white">
-
-          {/* Indicateur d'aperçu */}
-          <div className="flex items-center gap-2">
+        <header className="h-14 px-5 flex items-center gap-2 border-b border-zinc-200/80 bg-white overflow-x-auto">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[12px] font-medium text-zinc-700">Aperçu en direct</span>
+            <span className="text-[13px] font-medium text-zinc-700">Aperçu</span>
           </div>
 
-          <div className="flex-1" />
+          <div className="flex-1 min-w-2" />
 
-          {/* Boutons actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
 
-            {/* Télécharger */}
             <button
               onClick={downloadHtml}
-              className="h-9 px-3.5 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 text-zinc-700 text-[12px] font-medium flex items-center gap-2 transition-all"
-              title="Télécharger le fichier HTML"
+              className="h-8 px-3 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 text-zinc-700 text-[12px] font-medium flex items-center gap-1.5 transition-all whitespace-nowrap"
             >
               <Download className="w-3.5 h-3.5" />
-              Télécharger
+              <span className="hidden md:inline">Télécharger</span>
             </button>
 
-            {/* Recharger */}
             <button
               onClick={() => setKey((k) => k + 1)}
-              className="w-9 h-9 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 flex items-center justify-center text-zinc-500 transition-all"
-              title="Recharger l'aperçu"
+              className="w-8 h-8 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 flex items-center justify-center text-zinc-500 transition-all flex-shrink-0"
             >
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
 
-            {/* Copier le lien */}
             {currentProject?.published && (
               <button
                 onClick={copyPublicUrl}
-                className="h-9 px-3.5 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 text-zinc-700 text-[12px] font-medium flex items-center gap-2 transition-all"
-                title="Copier l'URL publique"
+                className="h-8 px-3 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 text-zinc-700 text-[12px] font-medium flex items-center gap-1.5 transition-all whitespace-nowrap"
               >
                 {copied ? (
                   <>
@@ -463,23 +562,21 @@ export default function BuilderPage() {
                 ) : (
                   <>
                     <Link2 className="w-3.5 h-3.5" />
-                    Copier le lien
+                    Lien
                   </>
                 )}
               </button>
             )}
 
-            {/* Publier */}
             <button
               onClick={handlePublish}
               disabled={publishing || !currentProject}
               className={
-                "h-9 px-4 rounded-lg text-[12px] font-semibold flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed " +
+                "h-8 px-4 rounded-lg text-[12px] font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap " +
                 (currentProject?.published
                   ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                   : "bg-zinc-900 hover:bg-zinc-800 text-white")
               }
-              title={currentProject ? "Publier le site" : "Génère d'abord un site"}
             >
               {publishing ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -493,127 +590,18 @@ export default function BuilderPage() {
           </div>
         </header>
 
-        {/* Aperçu */}
-        <div className="flex-1 bg-zinc-100 p-6 overflow-hidden">
-          <div className="w-full h-full rounded-2xl bg-white shadow-[0_8px_40px_rgba(0,0,0,0.06)] overflow-hidden border border-zinc-200/50">
+        <div className="flex-1 bg-zinc-50 p-5 overflow-hidden">
+          <div className="w-full h-full rounded-2xl bg-white shadow-[0_4px_20px_rgba(0,0,0,0.04)] overflow-hidden border border-zinc-200/60">
             <iframe
               key={key}
               srcDoc={html}
               className="w-full h-full border-0"
-              sandbox="allow-scripts allow-modals allow-forms"
-              title="Aperçu du site"
+                            sandbox="allow-scripts allow-same-origin allow-modals allow-forms allow-popups allow-popups-to-escape-sandbox"
+              title="Aperçu"
             />
           </div>
         </div>
       </main>
-
-      {/* ═══ MODALE : Personnalisation boutique ═══ */}
-      {showCustomize && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="relative w-full max-w-lg my-8 p-8 rounded-3xl bg-white shadow-2xl">
-            <button
-              onClick={() => setShowCustomize(false)}
-              className="absolute top-5 right-5 w-8 h-8 rounded-lg hover:bg-zinc-100 flex items-center justify-center text-zinc-400 hover:text-zinc-900 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="mb-8">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/30 mb-4">
-                <Palette className="w-6 h-6 text-white" />
-              </div>
-              <h2 className="text-2xl font-bold text-zinc-900 mb-1">
-                Personnalise ta boutique
-              </h2>
-              <p className="text-sm text-zinc-500">
-                Crée une boutique unique selon tes goûts
-              </p>
-            </div>
-
-            <div className="space-y-6">
-
-              <div>
-                <label className="block text-[12px] font-semibold text-zinc-700 mb-2">
-                  Nom de la boutique
-                </label>
-                <input
-                  type="text"
-                  value={storeName}
-                  onChange={(e) => setStoreName(e.target.value)}
-                  placeholder="Ex: SneakerKing, TechStore..."
-                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm text-zinc-900 outline-none focus:border-zinc-900 focus:bg-white transition-all placeholder-zinc-400"
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <label className="block text-[12px] font-semibold text-zinc-700 mb-3">
-                  Couleur principale
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {COLORS.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => setSelectedColor(c.id)}
-                      className={
-                        "p-2.5 rounded-xl border-2 transition-all flex flex-col items-center gap-1.5 " +
-                        (selectedColor === c.id
-                          ? "border-zinc-900 bg-zinc-50"
-                          : "border-zinc-100 hover:border-zinc-300")
-                      }
-                    >
-                      <div
-                        className="w-7 h-7 rounded-full"
-                        style={{ background: `linear-gradient(135deg, ${c.primary}, ${c.secondary})` }}
-                      />
-                      <span className="text-[10px] text-zinc-600">{c.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[12px] font-semibold text-zinc-700 mb-3">
-                  Ambiance
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {MOODS.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => setSelectedMood(m.id)}
-                      className={
-                        "p-3 rounded-xl border-2 transition-all text-left " +
-                        (selectedMood === m.id
-                          ? "border-zinc-900 bg-zinc-50"
-                          : "border-zinc-100 hover:border-zinc-300")
-                      }
-                    >
-                      <div className="font-semibold text-zinc-900 text-[13px]">{m.name}</div>
-                      <div className="text-[11px] text-zinc-500">{m.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => setShowCustomize(false)}
-                  className="flex-1 py-3 rounded-xl border border-zinc-200 text-zinc-700 hover:bg-zinc-50 text-[13px] font-medium transition-all"
-                >
-                  Annuler
-                </button>
-                <button
-                  onClick={handleCustomizeSubmit}
-                  disabled={!storeName.trim()}
-                  className="flex-1 py-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-[13px] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Générer la boutique
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );

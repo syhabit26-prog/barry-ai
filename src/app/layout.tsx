@@ -6,9 +6,13 @@ import { usePathname } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+// ⭐ Police style DeepSeek : Inter
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
-// ═══ Couleurs navbar + footer selon la page ═══
 const PAGE_THEMES: Record<string, { nav: string; navBorder: string; logo: string; text: string; hover: string; footer: string; footerBorder: string }> = {
   "/": { nav: "bg-black/95", navBorder: "border-yellow-400/30", logo: "from-yellow-400 to-orange-500", text: "text-yellow-300", hover: "hover:bg-yellow-400/10", footer: "bg-black/80", footerBorder: "border-yellow-400/20" },
   "/chat": { nav: "bg-amber-50/95", navBorder: "border-amber-300", logo: "from-yellow-400 to-amber-500", text: "text-amber-800", hover: "hover:bg-amber-200/50", footer: "bg-amber-50", footerBorder: "border-amber-300" },
@@ -29,7 +33,6 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
 
-  // Trouve la couleur correspondant à la page
   let theme = DEFAULT_THEME;
   for (const key of Object.keys(PAGE_THEMES)) {
     if (pathname === key || pathname.startsWith(key + "/")) {
@@ -38,26 +41,23 @@ export default function RootLayout({
   }
 
   return (
-    <html lang="fr">
-      <body className={inter.className}>
+    <html lang="fr" className={inter.variable}>
+      <body className={inter.className} style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
         <div className="min-h-screen flex flex-col bg-black">
           <nav className={`h-14 border-b ${theme.navBorder} ${theme.nav} backdrop-blur-md sticky top-0 z-50 transition-colors duration-300`}>
             <div className="max-w-7xl mx-auto h-full flex items-center justify-between px-4 gap-2">
-                            {/* Logo BARRY AI */}
-              <Link href="/" className="flex items-center gap-2.5 flex-shrink-0 group">
-                <div className={`relative w-9 h-9 rounded-xl bg-gradient-to-br ${theme.logo} flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-105 group-hover:rotate-3`}>
-                  <span className="text-white font-black text-lg leading-none select-none" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
+              <Link href="/" className="flex items-center gap-2 flex-shrink-0 group">
+                <div className={`relative w-8 h-8 rounded-xl bg-gradient-to-br ${theme.logo} flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-105 group-hover:rotate-3`}>
+                  <span className="text-white font-black text-base leading-none select-none" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
                     B
                   </span>
-                  <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 </div>
-                <span className={`font-black tracking-widest text-sm ${theme.text} transition-colors duration-300`}>
-                  BARRY<span className="opacity-60 ml-1">AI</span>
+                <span className={`font-bold tracking-tight text-[15px] ${theme.text} transition-colors duration-300`}>
+                  BARRY<span className="opacity-60 font-medium ml-1">AI</span>
                 </span>
               </Link>
 
-              {/* Liens navbar */}
-              <div className="flex items-center gap-1 text-xs overflow-x-auto">
+              <div className="flex items-center gap-1 text-[13px] overflow-x-auto">
                 <NavLink href="/" theme={theme}>Accueil</NavLink>
                 <NavLink href="/chat" theme={theme}>Chat IA</NavLink>
                 <NavLink href="/agents" theme={theme}>Agents</NavLink>
@@ -69,10 +69,9 @@ export default function RootLayout({
                 <NavLink href="/contact" theme={theme}>Contact</NavLink>
               </div>
 
-              {/* CTA */}
               <Link
                 href="/builder"
-                className={`px-3 py-1.5 rounded-lg bg-gradient-to-r ${theme.logo} text-white font-bold text-xs whitespace-nowrap flex-shrink-0 shadow-md transition-all duration-300`}
+                className={`px-3.5 py-1.5 rounded-lg bg-gradient-to-r ${theme.logo} text-white font-semibold text-[13px] whitespace-nowrap flex-shrink-0 shadow-md transition-all duration-300 hover:opacity-90`}
               >
                 Créer
               </Link>
@@ -82,8 +81,8 @@ export default function RootLayout({
           <main className="flex-1">{children}</main>
 
           <footer className={`border-t ${theme.footerBorder} ${theme.footer} py-4 px-6 transition-colors duration-300`}>
-            <div className={`max-w-7xl mx-auto flex items-center justify-between text-xs ${theme.text} opacity-70`}>
-              <p>© 2026 BARRY AI · Tous droits reserves</p>
+            <div className={`max-w-7xl mx-auto flex items-center justify-between text-[12px] ${theme.text} opacity-70`}>
+              <p>© 2026 BARRY AI · Tous droits réservés</p>
               <div className="flex gap-4">
                 <Link href="/about" className={theme.hover + " px-2 py-1 rounded transition-all"}>
                   À propos
@@ -115,7 +114,7 @@ function NavLink({
   return (
     <Link
       href={href}
-      className={`px-3 py-1.5 rounded-lg ${theme.text} ${theme.hover} transition-all whitespace-nowrap`}
+      className={`px-3 py-1.5 rounded-lg ${theme.text} ${theme.hover} transition-all whitespace-nowrap font-medium hover:opacity-100 opacity-90`}
     >
       {children}
     </Link>
