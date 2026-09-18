@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import {
-  Building2, Search, Key, Copy, Check,
+  Zap, Search, Key, Copy, Check,
   MessageSquare, Users, ShoppingCart, GraduationCap, BarChart3, Code2,
+  Sparkles, Shield, Rocket, Globe,
 } from "lucide-react";
 
 type Endpoint = {
@@ -69,6 +70,13 @@ const USE_CASES = [
   },
 ];
 
+const STATS = [
+  { icon: Zap, label: "Latence moyenne", value: "< 500ms" },
+  { icon: Shield, label: "Uptime garanti", value: "99.9%" },
+  { icon: Rocket, label: "Requêtes/mois", value: "10M+" },
+  { icon: Globe, label: "Régions", value: "5 continents" },
+];
+
 export default function EntreprisePage() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("Tout");
@@ -101,27 +109,63 @@ export default function EntreprisePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-950 via-[#0a1a12] to-black">
-      <div className="px-6 py-16 max-w-6xl mx-auto text-yellow-100">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-950 via-[#0a1a12] to-black relative overflow-hidden">
 
-        {/* HEADER */}
+      {/* Halos décoratifs */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-emerald-500/20 blur-[150px]" />
+        <div className="absolute top-1/3 -right-40 w-[600px] h-[600px] rounded-full bg-teal-500/15 blur-[150px]" />
+        <div className="absolute -bottom-40 left-1/3 w-[500px] h-[500px] rounded-full bg-green-500/15 blur-[140px]" />
+      </div>
+
+      <div className="relative z-10 px-6 py-16 max-w-6xl mx-auto text-yellow-100">
+
+        {/* ═══ HEADER ═══ */}
         <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-emerald-400/40 bg-black/60 backdrop-blur mb-6">
-            <Building2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-xs text-emerald-300">Entreprise · API</span>
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-emerald-400 via-teal-500 to-green-500 mb-6 shadow-2xl shadow-emerald-500/40">
+            <Zap className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-5xl font-black text-emerald-300 tracking-wider mb-4">
-            Intégrez BARRY AI dans vos apps
+
+          <h1 className="text-5xl md:text-6xl font-black tracking-tight mb-4">
+            <span className="bg-gradient-to-r from-emerald-300 via-teal-300 to-green-300 bg-clip-text text-transparent">
+              Intégrez BARRY AI
+            </span>
+            <br />
+            <span className="text-emerald-100/90">dans vos applications</span>
           </h1>
-          <p className="text-emerald-100/70 max-w-2xl mx-auto text-lg">
+
+          <p className="text-emerald-100/70 max-w-2xl mx-auto text-lg leading-relaxed">
             Une API puissante pour connecter nos agents IA à vos outils internes, votre CRM, votre ERP ou vos applications client.
           </p>
+        </div>
+
+        {/* ═══ STATS ═══ */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-16">
+          {STATS.map((s) => {
+            const Icon = s.icon;
+            return (
+              <div
+                key={s.label}
+                className="p-5 rounded-2xl border border-emerald-400/30 bg-black/40 backdrop-blur text-center hover:border-emerald-400/60 transition-all"
+              >
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 mb-3 shadow-lg shadow-emerald-500/30">
+                  <Icon className="w-5 h-5 text-white" />
+                </div>
+                <div className="text-2xl font-black bg-gradient-to-r from-emerald-300 to-teal-300 bg-clip-text text-transparent mb-1">
+                  {s.value}
+                </div>
+                <div className="text-[11px] text-emerald-200/60 uppercase tracking-wider">
+                  {s.label}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* ═══ CE QUE VOUS POUVEZ FAIRE ═══ */}
         <div className="mb-16">
           <div className="text-center mb-10">
-            <h2 className="text-3xl font-black text-emerald-300 mb-3">
+            <h2 className="text-3xl md:text-4xl font-black mb-3 bg-gradient-to-r from-emerald-300 to-teal-300 bg-clip-text text-transparent">
               Ce que vous pouvez faire
             </h2>
             <p className="text-emerald-100/60">
@@ -135,9 +179,9 @@ export default function EntreprisePage() {
               return (
                 <div
                   key={uc.title}
-                  className="p-6 rounded-2xl border border-emerald-400/30 bg-black/60 backdrop-blur hover:border-emerald-400/60 hover:shadow-lg hover:shadow-emerald-500/10 transition-all"
+                  className="group p-6 rounded-2xl border border-emerald-400/30 bg-black/60 backdrop-blur hover:border-emerald-400/70 hover:shadow-lg hover:shadow-emerald-500/20 hover:scale-[1.02] transition-all"
                 >
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/30 mb-4">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/30 mb-4 group-hover:scale-110 transition-transform">
                     <Icon className="w-6 h-6 text-white" />
                   </div>
                   <h3 className="text-emerald-300 font-bold text-lg mb-2">{uc.title}</h3>
@@ -153,60 +197,68 @@ export default function EntreprisePage() {
         </div>
 
         {/* ═══ GÉNÉRATION DE CLÉ API ═══ */}
-        <div className="mb-16 p-8 rounded-3xl border border-emerald-400/30 bg-gradient-to-br from-emerald-400/10 to-black/60 backdrop-blur">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-              <Key className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-emerald-300">Votre clé API</h2>
-              <p className="text-emerald-100/60 text-sm">
-                Générez une clé pour commencer à utiliser l'API BARRY AI
-              </p>
-            </div>
-          </div>
+        <div className="mb-16 p-8 md:p-10 rounded-3xl border border-emerald-400/40 bg-gradient-to-br from-emerald-400/10 via-teal-500/5 to-black/60 backdrop-blur relative overflow-hidden">
+          <div className="pointer-events-none absolute -top-40 -right-40 w-[400px] h-[400px] rounded-full bg-emerald-500/20 blur-[100px]" />
 
-          {!apiKey ? (
-            <button
-              onClick={generateKey}
-              className="w-full md:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-400 to-emerald-600 text-white font-bold hover:from-emerald-300 hover:to-emerald-500 transition-all shadow-lg shadow-emerald-500/30"
-            >
-              🔑 Générer ma clé API
-            </button>
-          ) : (
-            <div>
-              <div className="flex items-center gap-2 bg-black/60 border border-emerald-400/40 rounded-xl px-4 py-3 mb-3">
-                <code className="flex-1 text-emerald-200 text-sm font-mono break-all">
-                  {apiKey}
-                </code>
-                <button
-                  onClick={copyKey}
-                  className="flex items-center gap-1.5 text-xs text-emerald-300 hover:text-emerald-200 px-3 py-1.5 rounded-lg hover:bg-emerald-400/10 transition-all flex-shrink-0"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-3.5 h-3.5" />
-                      Copié !
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      Copier
-                    </>
-                  )}
-                </button>
+          <div className="relative z-10">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/40">
+                <Key className="w-7 h-7 text-white" />
               </div>
-              <p className="text-xs text-emerald-100/50">
-                ⚠️ Conservez cette clé en sécurité. Elle ne sera plus affichée après rechargement.
-              </p>
+              <div>
+                <h2 className="text-2xl md:text-3xl font-black bg-gradient-to-r from-emerald-300 to-teal-300 bg-clip-text text-transparent">
+                  Votre clé API
+                </h2>
+                <p className="text-emerald-100/60 text-sm">
+                  Générez une clé pour commencer à utiliser l'API BARRY AI
+                </p>
+              </div>
             </div>
-          )}
+
+            {!apiKey ? (
+              <button
+                onClick={generateKey}
+                className="w-full md:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-500 to-green-500 text-white font-bold hover:scale-[1.02] transition-all shadow-lg shadow-emerald-500/40 flex items-center justify-center gap-2"
+              >
+                <Sparkles className="w-5 h-5" />
+                Générer ma clé API
+              </button>
+            ) : (
+              <div>
+                <div className="flex items-center gap-2 bg-black/60 border-2 border-emerald-400/50 rounded-2xl px-4 py-4 mb-3 focus-within:border-emerald-400 transition-all">
+                  <code className="flex-1 text-emerald-200 text-sm font-mono break-all">
+                    {apiKey}
+                  </code>
+                  <button
+                    onClick={copyKey}
+                    className="flex items-center gap-1.5 text-xs text-emerald-300 hover:text-white px-3 py-2 rounded-lg bg-emerald-400/10 hover:bg-emerald-400/20 transition-all flex-shrink-0 font-bold"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-4 h-4" />
+                        Copié !
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        Copier
+                      </>
+                    )}
+                  </button>
+                </div>
+                <p className="text-xs text-emerald-100/50 flex items-center gap-2">
+                  <Shield className="w-3 h-3" />
+                  Conservez cette clé en sécurité. Elle ne sera plus affichée après rechargement.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ═══ RECHERCHE D'ENDPOINTS ═══ */}
         <div className="mb-8">
           <div className="text-center mb-8">
-            <h2 className="text-3xl font-black text-emerald-300 mb-3">
+            <h2 className="text-3xl md:text-4xl font-black mb-3 bg-gradient-to-r from-emerald-300 to-teal-300 bg-clip-text text-transparent">
               Endpoints disponibles
             </h2>
             <p className="text-emerald-100/60">
@@ -215,7 +267,7 @@ export default function EntreprisePage() {
           </div>
 
           <div className="max-w-2xl mx-auto mb-6">
-            <div className="flex items-center gap-2 bg-black/60 border border-emerald-400/40 rounded-2xl px-4 py-3 focus-within:border-emerald-400 focus-within:shadow-lg focus-within:shadow-emerald-500/10 transition-all backdrop-blur">
+            <div className="flex items-center gap-2 bg-black/60 border-2 border-emerald-400/40 rounded-2xl px-4 py-3 focus-within:border-emerald-400 focus-within:shadow-lg focus-within:shadow-emerald-500/20 transition-all backdrop-blur">
               <Search className="w-4 h-4 text-emerald-400/70" />
               <input
                 type="text"
@@ -241,9 +293,9 @@ export default function EntreprisePage() {
                 key={cat}
                 onClick={() => setCategory(cat)}
                 className={
-                  "text-xs px-3 py-1.5 rounded-full border transition-all " +
+                  "text-xs px-4 py-2 rounded-full border-2 transition-all font-semibold " +
                   (category === cat
-                    ? "border-emerald-400 bg-emerald-400/15 text-emerald-200"
+                    ? "border-emerald-400 bg-emerald-400/20 text-emerald-200 shadow-lg shadow-emerald-500/20"
                     : "border-emerald-400/20 text-emerald-300/70 hover:border-emerald-400/50 hover:bg-emerald-400/5")
                 }
               >
@@ -261,12 +313,12 @@ export default function EntreprisePage() {
               {filteredEndpoints.map((ep) => (
                 <div
                   key={ep.path}
-                  className="p-5 rounded-2xl border border-emerald-400/30 bg-black/60 backdrop-blur hover:border-emerald-400/60 hover:shadow-lg hover:shadow-emerald-500/10 transition-all"
+                  className="p-5 rounded-2xl border border-emerald-400/30 bg-black/60 backdrop-blur hover:border-emerald-400/70 hover:shadow-lg hover:shadow-emerald-500/20 transition-all group"
                 >
                   <div className="flex items-center gap-3 mb-2">
                     <span
                       className={
-                        "text-[10px] font-bold px-2 py-0.5 rounded " +
+                        "text-[10px] font-bold px-2.5 py-1 rounded-md " +
                         (ep.method === "GET"
                           ? "bg-sky-400/20 text-sky-300 border border-sky-400/40"
                           : "bg-emerald-400/20 text-emerald-300 border border-emerald-400/40")
@@ -274,7 +326,9 @@ export default function EntreprisePage() {
                     >
                       {ep.method}
                     </span>
-                    <code className="text-emerald-300 font-mono text-sm">{ep.path}</code>
+                    <code className="text-emerald-300 font-mono text-sm group-hover:text-emerald-200 transition-colors">
+                      {ep.path}
+                    </code>
                   </div>
                   <p className="text-emerald-100/60 text-xs leading-relaxed mb-2">{ep.desc}</p>
                   <span className="inline-block text-[10px] px-2 py-0.5 rounded-full border border-emerald-400/30 text-emerald-300/80">

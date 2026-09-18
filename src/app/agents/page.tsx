@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { AGENTS } from "@/lib/agents";
-import { ArrowRight, Bot } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 export default function AgentsPage() {
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-blue-50 via-white to-red-50 overflow-hidden">
 
-      {/* ═══ BLOBS DÉCORATIFS ═══ */}
       <div className="absolute inset-0 pointer-events-none">
         <div
           className="absolute -top-[20%] -left-[10%] w-[55%] h-[60%] rounded-full opacity-30 blur-[120px]"
@@ -22,16 +21,9 @@ export default function AgentsPage() {
         />
       </div>
 
-      {/* ═══ CONTENU ═══ */}
       <div className="relative z-10 max-w-6xl mx-auto px-6 py-16">
 
-        {/* HEADER */}
         <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-blue-300 bg-white/70 backdrop-blur-sm mb-6 shadow-sm">
-            <Bot className="w-3.5 h-3.5 text-blue-600" />
-            <span className="text-xs text-blue-700 font-semibold">Agents spécialisés</span>
-          </div>
-
           <h1 className="text-5xl md:text-6xl font-black text-gray-900 tracking-tight mb-4">
             Ton équipe d'
             <span className="bg-gradient-to-r from-blue-600 via-blue-500 to-red-500 bg-clip-text text-transparent">
@@ -44,10 +36,8 @@ export default function AgentsPage() {
           </p>
         </div>
 
-        {/* GRILLE */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {AGENTS.map((agent, index) => {
-            // Alternance des couleurs
             const isBlue = index % 2 === 0;
             const gradient = isBlue
               ? "from-blue-600 to-blue-500"
@@ -103,7 +93,6 @@ export default function AgentsPage() {
           })}
         </div>
 
-        {/* FOOTER DISCRET */}
         <p className="text-center text-xs text-gray-500 mt-16">
           BARRY AI · Créé par Mouhamed Barry
         </p>

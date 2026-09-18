@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, Send, MessageSquare, Clock, CheckCircle } from "lucide-react";
+import { Mail, Send, Clock, CheckCircle } from "lucide-react";
 
 export default function ContactPage() {
   const [form, setForm] = useState({ name: "", email: "", message: "" });
@@ -24,7 +24,6 @@ export default function ContactPage() {
       setForm({ name: "", email: "", message: "" });
       setTimeout(() => setSent(false), 5000);
     } catch {
-      // Fallback : ouvrir le client mail
       window.location.href = `mailto:syhabit26@gmail.com?subject=Contact de ${form.name}&body=${encodeURIComponent(form.message)}`;
     } finally {
       setSending(false);
@@ -34,7 +33,6 @@ export default function ContactPage() {
   return (
     <div className="min-h-screen bg-[#1a0f2e] text-white relative overflow-hidden">
 
-      {/* Halos mauve */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-purple-600/40 blur-[150px]" />
         <div className="absolute top-1/3 -right-40 w-[600px] h-[600px] rounded-full bg-fuchsia-500/30 blur-[150px]" />
@@ -43,13 +41,7 @@ export default function ContactPage() {
 
       <div className="relative z-10 px-6 py-20 max-w-5xl mx-auto">
 
-        {/* HERO */}
         <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-purple-400/40 bg-purple-500/10 backdrop-blur mb-6">
-            <MessageSquare className="w-3.5 h-3.5 text-purple-300" />
-            <span className="text-xs text-purple-200">Contact</span>
-          </div>
-
           <h1 className="text-5xl md:text-6xl font-black mb-4">
             <span className="bg-gradient-to-r from-purple-300 via-fuchsia-400 to-violet-300 bg-clip-text text-transparent">
               Parlons-en
@@ -61,7 +53,6 @@ export default function ContactPage() {
           </p>
         </div>
 
-        {/* CARTES INFO */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12">
           <div className="p-6 rounded-2xl border border-purple-400/30 bg-purple-500/10 backdrop-blur hover:border-purple-400/60 transition-all">
             <div className="flex items-center gap-3">
@@ -90,7 +81,6 @@ export default function ContactPage() {
           </div>
         </div>
 
-        {/* FORMULAIRE */}
         <div className="p-8 md:p-10 rounded-3xl border border-purple-400/30 bg-purple-500/5 backdrop-blur">
 
           {sent ? (
