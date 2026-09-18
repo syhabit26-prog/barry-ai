@@ -81,19 +81,9 @@ export default function ConnectorsPage() {
       return;
     }
 
-    // ⭐ CJ DROPSHIPPING — Avec paramètres pour tester la connexion
+    // ⭐ CJ DROPSHIPPING — Redirige vers la page /cj
     if (connector.name === "CJ Dropshipping") {
-      try {
-        const res = await fetch("/api/cj?search=sneakers&limit=1");
-        const data = await res.json();
-        if (data.ok) {
-          alert("✅ CJ Dropshipping est bien connecte !");
-        } else {
-          alert("❌ Erreur CJ : " + (data.error || "inconnue"));
-        }
-      } catch (err: any) {
-        alert("❌ Erreur CJ : " + err.message);
-      }
+      window.location.href = "/cj";
       return;
     }
 
