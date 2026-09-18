@@ -29,6 +29,56 @@ RÈGLES ABSOLUES :
 - Utilise le contexte des messages précédents pour répondre.
 `;
 
+const TRANSLATIONS: Record<string, string> = {
+  sneakers: "running shoes",
+  chaussures: "shoes",
+  vetements: "clothing",
+  bijoux: "jewelry",
+  montres: "wristwatch",
+  tech: "electronics",
+  cosmetiques: "cosmetics",
+  parfums: "perfume",
+  sacs: "handbag",
+  lunettes: "sunglasses",
+  jouets: "toys",
+  maison: "home decor",
+  cuisine: "kitchen",
+  sport: "sport",
+  fitness: "fitness",
+  yoga: "yoga mat",
+  velo: "bicycle",
+  camping: "camping",
+  voyage: "travel bag",
+  livres: "books",
+  art: "art decor",
+  musique: "music",
+  instruments: "guitar",
+  photo: "camera",
+  eclairage: "lamp",
+  meubles: "furniture",
+  casques: "headphones",
+  enceintes: "speaker",
+  drones: "drone",
+  gaming: "gaming",
+  bebe: "baby",
+  animaux: "pet",
+  chocolat: "chocolate",
+  cafe: "coffee",
+  the: "tea",
+  outils: "tools",
+  auto: "car",
+  moto: "motorcycle",
+  jardin: "garden",
+  beaute: "beauty",
+  massage: "massager",
+  "soins-visage": "face care",
+};
+
+function translateToEn(fr: string): string {
+  const first = fr.toLowerCase().split(" ")[0];
+  return TRANSLATIONS[first] || fr;
+}
+
 function detectMode(prompt: string): "dropshipping" | "code" | "chat" {
   const lower = (prompt || "").toLowerCase();
   const shopKeywords = ["boutique", "shop", "e-commerce", "dropshipping", "vendre", "catalogue", "panier", "store", "magasin"];
@@ -82,8 +132,9 @@ export async function POST(req: Request) {
     // ═══ DROPSHIPPING ═══
     if (mode === "dropshipping") {
       const storeName = customization?.storeName || "Ma Boutique";
-      const tagline = "Découvrez notre collection exclusive";
+      const tagline = "Decouvrez notre collection exclusive";
 
+      // Extrait le thème du prompt
       const lower = dernierMessage.toLowerCase().replace(/[^\w\s]/g, " ");
       const cleaned = lower
         .replace(/cree|creer|moi|une|un|des|de|du|d|la|le|les|boutique|shop|store|magasin|en ligne|pour|avec|sur|dropshipping|vendre|veux/gi, " ")
@@ -91,11 +142,69 @@ export async function POST(req: Request) {
         .trim();
       const keyword = cleaned.split(" ").slice(0, 3).join(" ") || "produits varies";
 
+      console.log("🛍️ Boutique:", storeName, "| theme:", keyword);
+
+      // ⭐ RÉCUPÈRE 20 PRODUITS
+      let products: any[] = [];
+
+      // Essaie CJ d'abord
+      try {
+        const { getCJAccessToken } = await import("@/lib/cj");
+        const token = await getCJAccessToken();
+        const enKeyword = translateToEn(keyword);
+        const cjUrl = "https://developers.cjdropshipping.com/api2.0/v1/product/list?pageNum=1&pageSize=20&productNameEn=" + encodeURIComponent(enKeyword);
+        const cjRes = await fetch(cjUrl, { headers: { "CJ-Access-Token": token } });
+        const cjData = await cjRes.json();
+
+        console.log("📦 CJ code:", cjData.code, "| produits:", cjData.data?.list?.length || 0);
+
+        if (cjData.code === 200 && cjData.data?.list?.length > 0) {
+          products = cjData.data.list.slice(0, 20).map((p: any, i: number) => {
+            const basePrice = parseFloat(p.sellPrice) || 49.99;
+            const badges = ["BEST-SELLER", "NOUVEAU", "PROMO", "TOP"];
+            return {
+              id: p.pid,
+              name: p.productNameEn || p.productName || "Produit",
+              description: (p.description || "Produit premium de qualite superieure").slice(0, 150),
+              price: Math.max(basePrice, 9.99),
+              oldPrice: Math.round(basePrice * 1.3 * 100) / 100,
+              image: p.productImage || "",
+              rating: 4.5 + Math.random() * 0.4,
+              reviews: 50 + Math.floor(Math.random() * 500),
+              badge: badges[i % 4],
+              sku: p.productSku || p.pid,
+              category: keyword,
+            };
+          });
+          console.log("✅ CJ :", products.length, "produits");
+        }
+      } catch (err: any) {
+        console.warn("⚠️ CJ échoué :", err.message);
+      }
+
+      // Fallback : bibliothèque locale
+      if (products.length === 0) {
+        const { getRandomProducts } = await import("@/lib/productsDatabase");
+        products = getRandomProducts(20, keyword);
+        console.log("✅ Library :", products.length, "produits");
+      }
+
+      // Styles aléatoires
       const styles = ["modern", "luxury", "colorful", "minimal"] as const;
       const style = styles[Math.floor(Math.random() * styles.length)];
 
       const { buildDropshippingSite } = await import("@/lib/dropshippingTemplate");
-      const html = buildDropshippingSite(storeName, tagline, keyword, customization?.color, customization?.mood, style);
+      const html = buildDropshippingSite(
+        storeName,
+        tagline,
+        keyword,
+        customization?.color,
+        customization?.mood,
+        style,
+        products
+      );
+
+      console.log("🎨 Boutique generee :", products.length, "produits injectes");
 
       return Response.json({
         ok: true,
@@ -103,6 +212,7 @@ export async function POST(req: Request) {
         mode: "dropshipping",
         style,
         keyword,
+        productCount: products.length,
       });
     }
 
@@ -120,40 +230,24 @@ RÈGLES CRITIQUES :
 - Design moderne avec animations, hover, responsive mobile
 - Utilise Tailwind CDN : <script src="https://cdn.tailwindcss.com"></script>
 - Police Google Fonts (Inter, Poppins, Playfair...)
-- Icônes SVG inline ou Lucide via CDN
 
-STRUCTURE OBLIGATOIRE pour un site vitrine (banque, école, restaurant, entreprise...) :
-1. HEADER sticky avec logo + navigation (Accueil, Services, À propos, Contact)
-2. HERO : grand titre accrocheur + sous-titre + 2 boutons CTA + image/illustration
-3. SECTION SERVICES : 3-6 cartes avec icônes, titres, descriptions
-4. SECTION À PROPOS : texte + image ou stats (chiffres clés)
-5. SECTION TÉMOIGNAGES ou AVANTAGES : 3 cartes
-6. SECTION CONTACT : formulaire (nom, email, message) + coordonnées
-7. FOOTER complet : liens, réseaux sociaux, copyright
-
-STRUCTURE pour un JEU :
-- Interface complète avec score, niveau, vies
-- Game over + restart fonctionnel
-- Contrôles clavier ET tactile (mobile)
-- Design soigné avec animations
-
-STRUCTURE pour un PORTFOLIO :
-- Hero avec photo + nom + titre
-- Section projets avec grid de cartes
-- Section compétences avec barres de progression
-- Section contact fonctionnelle
+STRUCTURE OBLIGATOIRE :
+1. HEADER sticky avec logo + navigation
+2. HERO : grand titre + sous-titre + bouton CTA
+3. SECTION SERVICES/CONTENU : cartes avec icônes
+4. SECTION À PROPOS : texte + stats
+5. SECTION CONTACT : formulaire + coordonnées
+6. FOOTER complet
 
 CONTENU :
-- Textes RÉELS en français (pas "Lorem ipsum")
-- Noms d'entreprise crédibles
-- Coordonnées fictives mais réalistes (adresse, téléphone, email)
-- Images via https://images.unsplash.com/ ou placehold.co
+- Textes RÉELS en français (pas de Lorem ipsum)
+- Coordonnées fictives mais réalistes
+- Images via https://placehold.co/ ou Unsplash
 
 RÈGLES ABSOLUES :
 - Réponds UNIQUEMENT avec le code complet, entre \`\`\`html et \`\`\`
 - Commence DIRECTEMENT par <!DOCTYPE html>
-- AUCUN texte avant ou après le code
-- Pas de "Voici votre site" ni "J'espère que..."`,
+- AUCUN texte avant ou après le code`,
         messages: isChat ? messages : [{ role: "user", content: dernierMessage }],
       });
       return result.toTextStreamResponse();
