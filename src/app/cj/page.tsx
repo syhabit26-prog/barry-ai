@@ -50,12 +50,10 @@ export default function CJPage() {
   const [loading, setLoading] = useState(false);
   const [totalProducts, setTotalProducts] = useState(5000);
 
-  const loadProducts = async (kw: string, cat?: string) => {
+  const loadProducts = async (kw: string) => {
     setLoading(true);
     try {
-      const url = cat
-        ? `/api/products/random?count=20&category=${encodeURIComponent(cat)}`
-        : `/api/products/all?search=${encodeURIComponent(kw)}&limit=100`;
+      const url = `/api/products/all?search=${encodeURIComponent(kw)}&limit=100`;
       const res = await fetch(url);
       const data = await res.json();
       if (data.ok) {
@@ -127,8 +125,8 @@ export default function CJPage() {
         {/* STATS */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
           <Stat icon={<Package className="w-5 h-5" />} label="Catalogue" value={totalProducts.toString()} />
-          <Stat icon={<ShoppingCart className="w-5 h-5" />} label="Commandes" value="0" />
-          <Stat icon={<DollarSign className="w-5 h-5" />} label="Revenus" value="0 €" />
+          <Stat icon={<ShoppingCart className="w-5 h-5" />} label="Commandes" value="—" />
+          <Stat icon={<DollarSign className="w-5 h-5" />} label="Revenus" value="—" />
           <Stat icon={<TrendingUp className="w-5 h-5" />} label="Marge moy." value="35%" />
         </div>
 
@@ -145,6 +143,7 @@ export default function CJPage() {
           </TabButton>
         </div>
 
+        {/* ═══ ONGLET PRODUITS ═══ */}
         {tab === "products" && (
           <div>
             <div className="mb-6 flex flex-col gap-4">
@@ -254,14 +253,10 @@ export default function CJPage() {
           </div>
         )}
 
-        {tab === "orders" && (
-          <div className="text-center py-20 text-pink-200/60">
-            <ShoppingCart className="w-12 h-12 mx-auto mb-4 opacity-40" />
-            <h3 className="text-xl font-bold mb-2">Aucune commande</h3>
-            <p className="text-sm">Crée une boutique et commence à vendre.</p>
-          </div>
-        )}
+        {/* ═══ ONGLET COMMANDES ═══ */}
+        {tab === "orders" && <OrdersTab />}
 
+        {/* ═══ ONGLET STATS ═══ */}
         {tab === "stats" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <StatCard title="Ventes ce mois" value="0 €" desc="Aucune vente encore" />
@@ -324,5 +319,152 @@ function TabButton({
       {icon}
       {children}
     </button>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ONGLET COMMANDES
+// ═══════════════════════════════════════════════════════════════
+function OrdersTab() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<string>("all");
+
+  useEffect(() => {
+    fetch("/api/cj/orders")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok) setOrders(data.orders || []);
+      })
+      .catch((err) => console.error(err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = filter === "all" ? orders : orders.filter((o) => o.status === filter);
+
+  const STATUS_COLORS: Record<string, string> = {
+    pending: "bg-yellow-400/20 text-yellow-300 border-yellow-400/40",
+    paid: "bg-blue-400/20 text-blue-300 border-blue-400/40",
+    processing: "bg-purple-400/20 text-purple-300 border-purple-400/40",
+    shipped: "bg-cyan-400/20 text-cyan-300 border-cyan-400/40",
+    delivered: "bg-emerald-400/20 text-emerald-300 border-emerald-400/40",
+    cancelled: "bg-red-400/20 text-red-300 border-red-400/40",
+  };
+
+  const STATUS_LABELS: Record<string, string> = {
+    pending: "En attente",
+    paid: "Payée",
+    processing: "En préparation",
+    shipped: "Expédiée",
+    delivered: "Livrée",
+    cancelled: "Annulée",
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-20 text-pink-200/60">
+        <RefreshCw className="w-8 h-8 mx-auto mb-4 animate-spin" />
+        Chargement des commandes...
+      </div>
+    );
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div className="text-center py-20 text-pink-200/60">
+        <ShoppingCart className="w-12 h-12 mx-auto mb-4 opacity-40" />
+        <h3 className="text-xl font-bold mb-2">Aucune commande pour le moment</h3>
+        <p className="text-sm">Crée une boutique et commence à vendre.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2 mb-6">
+        {["all", "pending", "processing", "shipped", "delivered"].map((s) => (
+          <button
+            key={s}
+            onClick={() => setFilter(s)}
+            className={
+              "text-xs px-3 py-1.5 rounded-full border transition-all " +
+              (filter === s
+                ? "border-pink-400 bg-pink-400/20 text-pink-200"
+                : "border-pink-400/20 text-pink-300/70 hover:border-pink-400/50")
+            }
+          >
+            {s === "all" ? `Toutes (${orders.length})` : STATUS_LABELS[s]}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        {filtered.map((order) => (
+          <div
+            key={order.id}
+            className="p-5 rounded-2xl border border-pink-400/30 bg-black/60 backdrop-blur hover:border-pink-400/60 transition-all"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
+              <div>
+                <p className="text-sm font-bold text-pink-200">
+                  #{order.id.slice(0, 8).toUpperCase()}
+                </p>
+                <p className="text-xs text-pink-300/60">
+                  {new Date(order.created_at).toLocaleDateString("fr-FR", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
+
+              <span
+                className={
+                  "text-[10px] font-bold px-3 py-1 rounded-full border " +
+                  (STATUS_COLORS[order.status] || STATUS_COLORS.pending)
+                }
+              >
+                {STATUS_LABELS[order.status] || order.status}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div>
+                <p className="text-pink-300/50 uppercase tracking-wider text-[10px] mb-1">
+                  Client
+                </p>
+                <p className="text-pink-100 font-medium">{order.customer_name || "—"}</p>
+              </div>
+              <div>
+                <p className="text-pink-300/50 uppercase tracking-wider text-[10px] mb-1">
+                  Email
+                </p>
+                <p className="text-pink-100 font-medium truncate">
+                  {order.customer_email || "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-pink-300/50 uppercase tracking-wider text-[10px] mb-1">
+                  Produits
+                </p>
+                <p className="text-pink-100 font-medium">
+                  {order.cj_order_items?.length || 1} article(s)
+                </p>
+              </div>
+              <div>
+                <p className="text-pink-300/50 uppercase tracking-wider text-[10px] mb-1">
+                  Total
+                </p>
+                <p className="text-pink-300 font-black">
+                  {parseFloat(order.total_price || 0).toFixed(2)} €
+                </p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
