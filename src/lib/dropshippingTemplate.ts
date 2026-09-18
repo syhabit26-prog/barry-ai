@@ -235,7 +235,7 @@ ${heroHTML}
 </div>
 <footer>© 2026 ${storeName} · Paiement sécurisé Stripe & PayPal</footer>
 <script>
-fetch('/api/cj/products?limit=20&search=${encodeURIComponent(category)}')
+fetch('/api/products/random?count=20&category=${encodeURIComponent(category)}')
 .then(function(r){return r.json();})
 .then(function(d){
   var grid = document.getElementById('grid');

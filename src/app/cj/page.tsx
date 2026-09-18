@@ -18,6 +18,7 @@ type Product = {
   reviews: number;
   badge: string;
   sku: string;
+  category: string;
 };
 
 type Tab = "products" | "orders" | "stats";
@@ -31,6 +32,14 @@ const CATEGORIES = [
   { label: "Lunettes", value: "lunettes" },
   { label: "Vêtements", value: "vetements" },
   { label: "Cosmétiques", value: "cosmetiques" },
+  { label: "Parfums", value: "parfums" },
+  { label: "Chaussures", value: "chaussures" },
+  { label: "Casques", value: "casques" },
+  { label: "Gaming", value: "gaming" },
+  { label: "Maison", value: "maison" },
+  { label: "Sport", value: "sport" },
+  { label: "Voyage", value: "voyage" },
+  { label: "Musique", value: "musique" },
 ];
 
 export default function CJPage() {
@@ -39,16 +48,19 @@ export default function CJPage() {
   const [category, setCategory] = useState("sneakers");
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
-  const [source, setSource] = useState("");
+  const [totalProducts, setTotalProducts] = useState(5000);
 
-  const loadProducts = async (kw: string) => {
+  const loadProducts = async (kw: string, cat?: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/cj/products?search=${encodeURIComponent(kw)}&limit=20`);
+      const url = cat
+        ? `/api/products/random?count=20&category=${encodeURIComponent(cat)}`
+        : `/api/products/all?search=${encodeURIComponent(kw)}&limit=100`;
+      const res = await fetch(url);
       const data = await res.json();
       if (data.ok) {
         setProducts(data.products || []);
-        setSource(data.source || "");
+        if (data.total) setTotalProducts(data.total);
       }
     } catch (err) {
       console.error(err);
@@ -57,8 +69,18 @@ export default function CJPage() {
     }
   };
 
+  const loadRandom = (cat: string) => {
+    setLoading(true);
+    fetch(`/api/products/random?count=20&category=${encodeURIComponent(cat)}&_=${Date.now()}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok) setProducts(data.products || []);
+      })
+      .finally(() => setLoading(false));
+  };
+
   useEffect(() => {
-    loadProducts(category);
+    loadRandom(category);
   }, [category]);
 
   const handleSearch = () => {
@@ -68,7 +90,6 @@ export default function CJPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-950 via-[#1a0a14] to-black text-white relative overflow-hidden">
 
-      {/* Halos décoratifs */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-pink-500/20 blur-[150px]" />
         <div className="absolute top-1/2 -right-40 w-[600px] h-[600px] rounded-full bg-fuchsia-500/15 blur-[150px]" />
@@ -85,11 +106,11 @@ export default function CJPage() {
             </div>
             <div>
               <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-pink-300 to-fuchsia-300 bg-clip-text text-transparent">
-                CJ Dropshipping
+                Bibliothèque Produits
               </h1>
               <p className="text-pink-200/60 text-sm flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                Connecté · {products.length} produits disponibles
+                {totalProducts} produits disponibles · Tous thèmes
               </p>
             </div>
           </div>
@@ -105,7 +126,7 @@ export default function CJPage() {
 
         {/* STATS */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-          <Stat icon={<Package className="w-5 h-5" />} label="Produits" value={products.length.toString()} />
+          <Stat icon={<Package className="w-5 h-5" />} label="Catalogue" value={totalProducts.toString()} />
           <Stat icon={<ShoppingCart className="w-5 h-5" />} label="Commandes" value="0" />
           <Stat icon={<DollarSign className="w-5 h-5" />} label="Revenus" value="0 €" />
           <Stat icon={<TrendingUp className="w-5 h-5" />} label="Marge moy." value="35%" />
@@ -124,10 +145,8 @@ export default function CJPage() {
           </TabButton>
         </div>
 
-        {/* CONTENU ONGLETS */}
         {tab === "products" && (
           <div>
-            {/* Barre de recherche + catégories */}
             <div className="mb-6 flex flex-col gap-4">
               <div className="flex gap-2">
                 <div className="flex-1 flex items-center gap-2 bg-black/60 border border-pink-400/30 rounded-2xl px-4 py-3 focus-within:border-pink-400 transition-all">
@@ -137,7 +156,7 @@ export default function CJPage() {
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                    placeholder="Rechercher un produit (sneakers, bijoux, montres...)"
+                    placeholder="Rechercher parmi 5000 produits..."
                     className="flex-1 bg-transparent text-sm outline-none placeholder-pink-300/40 text-pink-50"
                   />
                 </div>
@@ -166,69 +185,71 @@ export default function CJPage() {
                   </button>
                 ))}
               </div>
-
-              {source && (
-                <p className="text-xs text-pink-300/50">
-                  Source : {source === "cj" ? "CJ Dropshipping" : source === "ai-unsplash" ? "IA + Unsplash" : source}
-                </p>
-              )}
             </div>
 
-            {/* Grille produits */}
             {loading ? (
               <div className="text-center py-20 text-pink-200/60">
                 <RefreshCw className="w-8 h-8 mx-auto mb-4 animate-spin" />
-                Chargement des produits CJ...
+                Chargement...
               </div>
             ) : products.length === 0 ? (
-              <div className="text-center py-20 text-pink-200/60">
-                Aucun produit trouvé
-              </div>
+              <div className="text-center py-20 text-pink-200/60">Aucun produit trouvé</div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {products.map((p) => (
-                  <div
-                    key={p.id}
-                    className="group p-4 rounded-2xl border border-pink-400/30 bg-black/60 backdrop-blur hover:border-pink-400/70 hover:shadow-lg hover:shadow-pink-500/20 transition-all"
-                  >
-                    <div className="relative aspect-square rounded-xl bg-white mb-3 overflow-hidden">
-                      <img
-                        src={p.image}
-                        alt={p.name}
-                        className="w-full h-full object-contain p-3 group-hover:scale-105 transition-transform"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = "https://placehold.co/300x300/fdf2f8/be185d?text=Produit";
-                        }}
-                      />
-                      {p.badge && (
-                        <span className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded bg-gradient-to-r from-pink-500 to-fuchsia-600 text-white">
-                          {p.badge}
-                        </span>
-                      )}
-                    </div>
-                    <h3 className="text-sm font-bold text-pink-100 mb-1 line-clamp-2 min-h-[40px]">
-                      {p.name}
-                    </h3>
-                    <div className="flex items-center gap-1 text-xs text-pink-300/60 mb-2">
-                      <Star className="w-3 h-3 fill-pink-400 text-pink-400" />
-                      <span>{p.rating.toFixed(1)}</span>
-                      <span>· {p.reviews} avis</span>
-                    </div>
-                    <div className="flex items-baseline gap-2 mb-3">
-                      <span className="text-xl font-black text-pink-300">{p.price.toFixed(2)} €</span>
-                      {p.oldPrice > p.price && (
-                        <span className="text-xs text-pink-300/40 line-through">{p.oldPrice.toFixed(2)} €</span>
-                      )}
-                    </div>
-                    <Link
-                      href="/builder"
-                      className="block w-full text-center py-2 rounded-xl bg-gradient-to-r from-pink-500/20 to-fuchsia-600/20 border border-pink-400/40 hover:from-pink-500 hover:to-fuchsia-600 text-pink-200 hover:text-white font-bold text-xs transition-all"
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {products.map((p) => (
+                    <div
+                      key={p.id}
+                      className="group p-4 rounded-2xl border border-pink-400/30 bg-black/60 backdrop-blur hover:border-pink-400/70 hover:shadow-lg hover:shadow-pink-500/20 transition-all"
                     >
-                      Ajouter à ma boutique
-                    </Link>
-                  </div>
-                ))}
-              </div>
+                      <div className="relative aspect-square rounded-xl bg-white mb-3 overflow-hidden">
+                        <img
+                          src={p.image}
+                          alt={p.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "https://placehold.co/300x300/fdf2f8/be185d?text=Produit";
+                          }}
+                        />
+                        {p.badge && (
+                          <span className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded bg-gradient-to-r from-pink-500 to-fuchsia-600 text-white">
+                            {p.badge}
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="text-sm font-bold text-pink-100 mb-1 line-clamp-2 min-h-[40px]">
+                        {p.name}
+                      </h3>
+                      <div className="flex items-center gap-1 text-xs text-pink-300/60 mb-2">
+                        <Star className="w-3 h-3 fill-pink-400 text-pink-400" />
+                        <span>{p.rating.toFixed(1)}</span>
+                        <span>· {p.reviews} avis</span>
+                      </div>
+                      <div className="flex items-baseline gap-2 mb-3">
+                        <span className="text-xl font-black text-pink-300">{p.price.toFixed(2)} €</span>
+                        {p.oldPrice > p.price && (
+                          <span className="text-xs text-pink-300/40 line-through">{p.oldPrice.toFixed(2)} €</span>
+                        )}
+                      </div>
+                      <Link
+                        href="/builder"
+                        className="block w-full text-center py-2 rounded-xl bg-gradient-to-r from-pink-500/20 to-fuchsia-600/20 border border-pink-400/40 hover:from-pink-500 hover:to-fuchsia-600 text-pink-200 hover:text-white font-bold text-xs transition-all"
+                      >
+                        Ajouter à ma boutique
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="text-center mt-8">
+                  <button
+                    onClick={() => loadRandom(category)}
+                    className="px-8 py-3 rounded-2xl bg-gradient-to-r from-pink-500/20 to-fuchsia-600/20 border border-pink-400/40 hover:from-pink-500 hover:to-fuchsia-600 text-pink-200 hover:text-white font-bold text-sm transition-all"
+                  >
+                    🔄 Voir 20 autres produits
+                  </button>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -236,15 +257,15 @@ export default function CJPage() {
         {tab === "orders" && (
           <div className="text-center py-20 text-pink-200/60">
             <ShoppingCart className="w-12 h-12 mx-auto mb-4 opacity-40" />
-            <h3 className="text-xl font-bold mb-2">Aucune commande pour le moment</h3>
-            <p className="text-sm">Crée une boutique et commence à vendre pour voir tes commandes ici.</p>
+            <h3 className="text-xl font-bold mb-2">Aucune commande</h3>
+            <p className="text-sm">Crée une boutique et commence à vendre.</p>
           </div>
         )}
 
         {tab === "stats" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <StatCard title="Ventes ce mois" value="0 €" desc="Aucune vente encore" />
-            <StatCard title="Produits importés" value={products.length.toString()} desc="Depuis CJ Dropshipping" />
+            <StatCard title="Catalogue total" value={totalProducts.toString()} desc="Produits disponibles" />
             <StatCard title="Taux de marge moyen" value="35%" desc="Sur tes produits" />
             <StatCard title="Satisfaction client" value="—" desc="En attente de commandes" />
           </div>
