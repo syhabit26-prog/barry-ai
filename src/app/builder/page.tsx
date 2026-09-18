@@ -11,11 +11,11 @@ const HTML_INITIAL = `<!DOCTYPE html>
 <meta charset="utf-8">
 <title>BARRY AI</title>
 <style>
-  body { margin:0; font-family:sans-serif; background:#09090b; color:white;
+  body { margin:0; font-family:sans-serif; background:#fff; color:#1a1a1a;
          min-height:100vh; display:flex; flex-direction:column;
          align-items:center; justify-content:center; text-align:center; padding:40px; }
-  h1 { color:#facc15; font-size:48px; margin:0; }
-  p { color:#a1a1aa; margin-top:16px; }
+  h1 { font-size:48px; margin:0; color:#f59e0b; }
+  p { color:#52525b; margin-top:16px; }
 </style>
 </head>
 <body>
@@ -24,7 +24,6 @@ const HTML_INITIAL = `<!DOCTYPE html>
 </body>
 </html>`;
 
-// ═══ STYLES DISPONIBLES ═══
 const COLORS = [
   { id: "yellow", name: "Jaune Doré", primary: "#facc15", secondary: "#f59e0b" },
   { id: "purple", name: "Violet", primary: "#a855f7", secondary: "#7c3aed" },
@@ -52,7 +51,6 @@ export default function BuilderPage() {
   const [loading, setLoading] = useState(false);
   const [key, setKey] = useState(0);
 
-  // ═══ MODALE DE PERSONNALISATION ═══
   const [showCustomize, setShowCustomize] = useState(false);
   const [storePrompt, setStorePrompt] = useState("");
   const [storeName, setStoreName] = useState("");
@@ -63,11 +61,9 @@ export default function BuilderPage() {
     const texte = input.trim();
     if (!texte || loading) return;
 
-    // Detecte si c'est une boutique
     const isShop = /boutique|shop|e-?commerce|dropshipping|store|magasin|vendre/i.test(texte);
 
     if (isShop) {
-      // Ouvre la modale de personnalisation
       setStorePrompt(texte);
       setStoreName("");
       setShowCustomize(true);
@@ -75,7 +71,6 @@ export default function BuilderPage() {
       return;
     }
 
-    // Sinon, comportement normal
     await generateSite(texte, null);
   };
 
@@ -125,10 +120,34 @@ export default function BuilderPage() {
           }
         }
 
-        htmlExtrait = htmlExtrait.trim();
+               htmlExtrait = htmlExtrait.trim();
         if (htmlExtrait) {
           setHtml(htmlExtrait);
           setKey((k) => k + 1);
+
+          // 💾 SAUVEGARDE AUTOMATIQUE
+          try {
+            const saveRes = await fetch("/api/projects/save", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: customization?.storeName || "Mon site",
+                prompt: texte,
+                html: htmlExtrait,
+                style: data.style || null,
+                category: data.keyword || null,
+                userId: null,
+              }),
+            });
+            const saveData = await saveRes.json();
+            if (saveData.ok) {
+              console.log("✅ Site sauvegardé :", saveData.project.slug);
+            } else {
+              console.warn("⚠️ Échec sauvegarde :", saveData.error);
+            }
+          } catch (saveErr) {
+            console.warn("⚠️ Erreur sauvegarde :", saveErr);
+          }
         }
       }
     } catch (err: any) {
@@ -156,43 +175,66 @@ export default function BuilderPage() {
   };
 
   return (
-    <div className="h-screen flex text-yellow-300 bg-black overflow-hidden">
+    <div
+      className="h-screen flex overflow-hidden gap-3 p-3"
+      style={{
+        background:
+          "radial-gradient(at 0% 0%, #fde68a 0%, transparent 50%), radial-gradient(at 100% 0%, #fdba74 0%, transparent 50%), radial-gradient(at 50% 100%, #fef3c7 0%, transparent 50%), #fef9f3",
+      }}
+    >
 
-      {/* PANNEAU GAUCHE : CHAT */}
-      <div className="w-2/5 flex flex-col border-r border-yellow-400/30">
+      {/* ═══ PANNEAU GAUCHE : CHAT ═══ */}
+      <div className="w-2/5 flex flex-col rounded-3xl bg-white shadow-[0_8px_40px_rgba(251,146,60,0.15)] overflow-hidden">
 
-        <div className="p-4 border-b border-yellow-400/30 flex items-center gap-2 flex-shrink-0">
-          <Sparkles className="w-5 h-5 text-yellow-400" />
-          <h1 className="font-black tracking-widest text-base">BUILDER</h1>
+        <div className="p-5 flex items-center gap-3 flex-shrink-0 border-b border-orange-100">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/30">
+            <Sparkles className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="font-black tracking-widest text-sm text-zinc-900">
+              BUILDER
+            </h1>
+            <p className="text-[10px] text-zinc-500">Barry AI Studio</p>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="flex-1 overflow-y-auto p-5 space-y-3 bg-orange-50/30">
           {messages.map((msg, i) => (
             <div key={i} className="flex gap-2">
-              <div className={"w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-black " + (msg.role === "user" ? "bg-yellow-400 text-black" : "bg-black border border-yellow-400/60 text-yellow-300")}>
+              <div className={
+                "w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-black " +
+                (msg.role === "user"
+                  ? "bg-gradient-to-br from-yellow-400 to-orange-500 text-white shadow-md shadow-orange-500/20"
+                  : "bg-orange-100 text-orange-600")
+              }>
                 {msg.role === "user" ? "M" : "B"}
               </div>
-              <div className={"flex-1 p-3 rounded-lg text-xs leading-relaxed " + (msg.role === "user" ? "bg-yellow-400/95 text-black" : "bg-black/70 border border-yellow-400/30 text-yellow-100")}>
+              <div className={
+                "flex-1 p-3 rounded-2xl text-xs leading-relaxed " +
+                (msg.role === "user"
+                  ? "bg-gradient-to-br from-yellow-400 to-orange-500 text-white shadow-md shadow-orange-500/20"
+                  : "bg-white border border-orange-100 text-zinc-700 shadow-sm")
+              }>
                 <p className="whitespace-pre-wrap">{msg.content}</p>
               </div>
             </div>
           ))}
         </div>
 
-        <div className="p-4 border-t border-yellow-400/30 flex-shrink-0">
-          <div className="flex gap-2 bg-black/60 border border-yellow-400/40 rounded-lg p-2 focus-within:border-yellow-400">
+        <div className="p-4 flex-shrink-0 border-t border-orange-100">
+          <div className="flex gap-2 bg-orange-50/50 rounded-2xl p-2 border border-orange-100 focus-within:border-orange-300 focus-within:bg-white transition-all">
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSend()}
               placeholder="Decris ce que tu veux creer..."
               disabled={loading}
-              className="flex-1 bg-transparent px-2 py-1 text-xs outline-none placeholder-yellow-500/50 text-yellow-100"
+              className="flex-1 bg-transparent px-3 py-2 text-xs outline-none placeholder-zinc-400 text-zinc-900"
             />
             <button
               onClick={handleSend}
               disabled={loading}
-              className="bg-gradient-to-r from-yellow-400 to-yellow-500 disabled:opacity-50 text-black font-bold rounded-md px-3 py-1.5 text-xs flex items-center gap-1"
+              className="bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-300 hover:to-orange-400 disabled:opacity-50 text-white font-bold rounded-xl px-4 py-2 text-xs flex items-center gap-1.5 shadow-lg shadow-orange-500/30 transition-all"
             >
               <Send className="w-3 h-3" />
               Generer
@@ -201,21 +243,21 @@ export default function BuilderPage() {
         </div>
       </div>
 
-      {/* PANNEAU DROIT : APERCU */}
-      <div className="w-3/5 flex flex-col">
-        <div className="h-10 border-b border-yellow-400/30 flex items-center px-4 gap-3 bg-black/60 flex-shrink-0">
+      {/* ═══ PANNEAU DROIT : APERCU ═══ */}
+      <div className="w-3/5 flex flex-col rounded-3xl bg-white shadow-[0_8px_40px_rgba(251,146,60,0.15)] overflow-hidden">
+        <div className="h-12 flex items-center px-5 gap-3 flex-shrink-0 border-b border-orange-100 bg-white">
           <div className="flex gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-            <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
-            <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+            <div className="w-3 h-3 rounded-full bg-red-300" />
+            <div className="w-3 h-3 rounded-full bg-yellow-300" />
+            <div className="w-3 h-3 rounded-full bg-green-300" />
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-yellow-500/80 ml-2">
+          <div className="flex items-center gap-1.5 text-xs text-zinc-500 ml-2">
             <Code2 className="w-3 h-3" />
             Apercu en direct
           </div>
           <button
             onClick={() => setKey((k) => k + 1)}
-            className="ml-auto flex items-center gap-1 text-xs text-yellow-400 hover:bg-yellow-400/10 px-2 py-1 rounded"
+            className="ml-auto flex items-center gap-1 text-xs text-orange-500 hover:bg-orange-50 px-3 py-1.5 rounded-xl transition-all font-medium"
           >
             <RefreshCw className="w-3 h-3" />
             Recharger
@@ -234,118 +276,118 @@ export default function BuilderPage() {
 
       {/* ═══ MODALE PERSONNALISATION ═══ */}
       {showCustomize && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="w-full max-w-2xl my-8 p-8 rounded-2xl border-2 border-yellow-400/50 bg-gradient-to-br from-black to-yellow-950/20 relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-md p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl my-8 p-8 rounded-3xl bg-white shadow-[0_20px_80px_rgba(251,146,60,0.25)] overflow-hidden">
+
+            <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-[500px] h-[500px] rounded-full bg-gradient-to-br from-yellow-200 via-orange-200 to-amber-100 blur-[110px] opacity-60" />
 
             <button
               onClick={() => setShowCustomize(false)}
-              className="absolute top-4 right-4 text-yellow-400 hover:text-yellow-300"
+              className="absolute top-5 right-5 z-10 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl p-1.5 transition-all"
             >
               <X className="w-5 h-5" />
             </button>
 
-            {/* HEADER */}
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 mb-3">
-                <Palette className="w-8 h-8 text-black" />
+            <div className="relative z-10">
+
+              <div className="text-center mb-8">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-gradient-to-br from-yellow-400 to-orange-500 mb-4 shadow-xl shadow-orange-500/30">
+                  <Palette className="w-8 h-8 text-white" />
+                </div>
+                <h2 className="text-3xl font-black mb-2 text-zinc-900">
+                  Personnalise ta <span className="bg-gradient-to-r from-yellow-500 to-orange-500 bg-clip-text text-transparent">boutique</span>
+                </h2>
+                <p className="text-zinc-500 text-sm">
+                  Cree une boutique 100% unique selon tes gouts
+                </p>
               </div>
-              <h2 className="text-3xl font-black text-yellow-300 mb-2">
-                Personnalise ta boutique
-              </h2>
-              <p className="text-yellow-100/70 text-sm">
-                Cree une boutique 100% unique selon tes gouts
-              </p>
-            </div>
 
-            {/* NOM */}
-            <div className="mb-6">
-              <label className="block text-sm text-yellow-300 font-bold mb-2">
-                🏷️ Nom de ta boutique
-              </label>
-              <input
-                type="text"
-                value={storeName}
-                onChange={(e) => setStoreName(e.target.value)}
-                placeholder="Ex: SneakerKing, TechStore, Bijoux Chic..."
-                className="w-full bg-black/60 border border-yellow-400/40 rounded-xl px-4 py-3 text-yellow-100 outline-none focus:border-yellow-400"
-                autoFocus
-              />
-            </div>
-
-            {/* COULEURS */}
-            <div className="mb-6">
-              <label className="block text-sm text-yellow-300 font-bold mb-3">
-                🎨 Couleur principale
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {COLORS.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => setSelectedColor(c.id)}
-                    className={
-                      "p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-2 " +
-                      (selectedColor === c.id
-                        ? "border-white scale-105"
-                        : "border-transparent hover:border-white/30")
-                    }
-                  >
-                    <div
-                      className="w-8 h-8 rounded-full"
-                      style={{ background: "linear-gradient(135deg, " + c.primary + ", " + c.secondary + ")" }}
-                    />
-                    <span className="text-[10px] text-yellow-300 text-center">
-                      {c.name}
-                    </span>
-                  </button>
-                ))}
+              <div className="mb-6">
+                <label className="block text-sm text-zinc-800 font-bold mb-2">
+                  🏷️ Nom de ta boutique
+                </label>
+                <input
+                  type="text"
+                  value={storeName}
+                  onChange={(e) => setStoreName(e.target.value)}
+                  placeholder="Ex: SneakerKing, TechStore, Bijoux Chic..."
+                  className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl px-4 py-3 text-zinc-900 outline-none focus:border-orange-300 focus:bg-white focus:shadow-md focus:shadow-orange-500/10 transition-all placeholder-zinc-400"
+                  autoFocus
+                />
               </div>
-            </div>
 
-            {/* AMBIANCE */}
-            <div className="mb-8">
-              <label className="block text-sm text-yellow-300 font-bold mb-3">
-                ✨ Ambiance
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {MOODS.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => setSelectedMood(m.id)}
-                    className={
-                      "p-4 rounded-xl border-2 transition-all text-left " +
-                      (selectedMood === m.id
-                        ? "border-yellow-400 bg-yellow-400/10"
-                        : "border-yellow-400/20 hover:border-yellow-400/50")
-                    }
-                  >
-                    <div className="font-bold text-yellow-300 text-sm mb-1">
-                      {m.name}
-                    </div>
-                    <div className="text-[11px] text-yellow-100/60">
-                      {m.desc}
-                    </div>
-                  </button>
-                ))}
+              <div className="mb-6">
+                <label className="block text-sm text-zinc-800 font-bold mb-3">
+                  🎨 Couleur principale
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {COLORS.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setSelectedColor(c.id)}
+                      className={
+                        "p-3 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 " +
+                        (selectedColor === c.id
+                          ? "border-orange-300 bg-orange-50/70 scale-105 shadow-md shadow-orange-500/15"
+                          : "border-zinc-100 hover:border-orange-200 bg-white")
+                      }
+                    >
+                      <div
+                        className="w-8 h-8 rounded-full shadow-md"
+                        style={{ background: "linear-gradient(135deg, " + c.primary + ", " + c.secondary + ")" }}
+                      />
+                      <span className="text-[10px] text-zinc-600 text-center">
+                        {c.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {/* ACTIONS */}
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowCustomize(false)}
-                className="flex-1 py-3 rounded-xl border border-yellow-400/40 text-yellow-300 hover:bg-yellow-400/10 transition-all"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleCustomizeSubmit}
-                disabled={!storeName.trim()}
-                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-500 text-black font-bold hover:from-yellow-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ✨ Generer ma boutique
-              </button>
-            </div>
+              <div className="mb-8">
+                <label className="block text-sm text-zinc-800 font-bold mb-3">
+                  ✨ Ambiance
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {MOODS.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => setSelectedMood(m.id)}
+                      className={
+                        "p-4 rounded-2xl border-2 transition-all text-left " +
+                        (selectedMood === m.id
+                          ? "border-orange-300 bg-orange-50/70 shadow-md shadow-orange-500/10"
+                          : "border-zinc-100 hover:border-orange-200 bg-white")
+                      }
+                    >
+                      <div className="font-bold text-zinc-900 text-sm mb-1">
+                        {m.name}
+                      </div>
+                      <div className="text-[11px] text-zinc-500">
+                        {m.desc}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowCustomize(false)}
+                  className="flex-1 py-3 rounded-2xl border border-zinc-200 text-zinc-700 hover:bg-zinc-50 transition-all"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleCustomizeSubmit}
+                  disabled={!storeName.trim()}
+                  className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold hover:from-yellow-300 hover:to-orange-400 shadow-lg shadow-orange-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ✨ Generer ma boutique
+                </button>
+              </div>
+
+            </div>
           </div>
         </div>
       )}
