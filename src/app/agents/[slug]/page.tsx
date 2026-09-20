@@ -1,16 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ALL_AGENTS } from "@/lib/allAgents";
-import { ArrowLeft, Send, Sparkles } from "lucide-react";
+import { ArrowLeft, Sparkles, Send, ImagePlus, X } from "lucide-react";
 
-type Message = { role: "user" | "assistant"; content: string };
+type Message = { role: "user" | "assistant"; content: string; image?: string };
 
-// ═══ Rendu markdown custom style ChatGPT ═══
 function MarkdownView({ content }: { content: string }) {
   return (
     <div className="md-content">
@@ -18,18 +17,14 @@ function MarkdownView({ content }: { content: string }) {
         remarkPlugins={[remarkGfm]}
         components={{
           table: ({ children }) => (
-            <div className="table-wrap">
-              <table>{children}</table>
-            </div>
+            <div className="table-wrap"><table>{children}</table></div>
           ),
           a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noreferrer">
-              {children}
-            </a>
+            <a href={href} target="_blank" rel="noreferrer">{children}</a>
           ),
         }}
       >
-        {content}
+        {content.replace(/<br\s*\/?>/gi, "\n")}
       </ReactMarkdown>
     </div>
   );
@@ -42,60 +37,88 @@ export default function AgentPage() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (agent) {
       setMessages([
         {
           role: "assistant",
-          content:
-            "Bonjour ! Je suis **" +
-            agent.name +
-            "** (" +
-            agent.tagline +
-            "). Comment puis-je t'aider ?",
+          content: "Bonjour ! Je suis **" + agent.name + "**. " + agent.tagline + ". Comment puis-je t'aider ?",
         },
       ]);
     }
   }, [slug]);
 
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   if (!agent) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-red-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
-          <h1 className="text-3xl font-black text-gray-900 mb-4">Agent introuvable</h1>
-          <p className="text-gray-500 mb-6">
-            Slug demandé : <code>{slug}</code>
-          </p>
-          <Link href="/agents" className="text-blue-600 hover:underline font-bold">
-            ← Retour aux agents
-          </Link>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Agent introuvable</h1>
+          <Link href="/agents" className="text-orange-500 hover:underline">← Retour aux agents</Link>
         </div>
       </div>
     );
   }
 
+  const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setImage(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const clearImage = () => {
+    setImage(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
   const handleSend = async () => {
     const texte = input.trim();
-    if (!texte || loading) return;
+    if ((!texte && !image) || loading) return;
 
-    const newMessages: Message[] = [...messages, { role: "user", content: texte }];
+    const userMsg: Message = {
+      role: "user",
+      content: texte || "(photo)",
+      image: image || undefined,
+    };
+
+    const newMessages: Message[] = [...messages, userMsg];
     setMessages(newMessages);
     setInput("");
+    const sentImage = image;
+    clearImage();
     setLoading(true);
-    setMessages((prev) => [...prev, { role: "assistant", content: "..." }]);
+    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
+      // ⭐ On envoie le message + image au backend
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: texte,
-          messages: newMessages,
+          messages: newMessages.map((m) => ({
+            role: m.role,
+            content: m.image
+              ? [
+                  { type: "text", text: m.content },
+                  { type: "image", image: m.image },
+                ]
+              : m.content,
+          })),
           mode: "chat",
           customSystemPrompt: agent.systemPrompt,
           provider: "groq",
+          hasImage: !!sentImage,
         }),
       });
 
@@ -107,22 +130,20 @@ export default function AgentPage() {
         while (!done) {
           const { value, done: d } = await reader.read();
           done = d;
-          if (value) fullText += decoder.decode(value, { stream: true });
+          if (value) {
+            fullText += decoder.decode(value, { stream: true });
+            setMessages((prev) => {
+              const copie = [...prev];
+              copie[copie.length - 1] = { role: "assistant", content: fullText };
+              return copie;
+            });
+          }
         }
       }
-
-      setMessages((prev) => {
-        const copie = [...prev];
-        copie[copie.length - 1] = { role: "assistant", content: fullText || "..." };
-        return copie;
-      });
     } catch (err: any) {
       setMessages((prev) => {
         const copie = [...prev];
-        copie[copie.length - 1] = {
-          role: "assistant",
-          content: "Erreur : " + err.message,
-        };
+        copie[copie.length - 1] = { role: "assistant", content: "Erreur : " + err.message };
         return copie;
       });
     } finally {
@@ -130,120 +151,126 @@ export default function AgentPage() {
     }
   };
 
-  const gradient = "from-blue-600 to-blue-500";
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-red-50 flex flex-col">
+    <div className="min-h-screen bg-white flex flex-col">
 
       {/* HEADER */}
-      <div className="border-b border-gray-200 bg-white/80 backdrop-blur-sm px-6 py-4 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto flex items-center gap-4">
-          <Link href="/agents" className="text-gray-500 hover:text-gray-900 transition-all">
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <div
-            className={
-              "w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-lg bg-gradient-to-br " +
-              gradient
-            }
-          >
-            <span>{agent.emoji}</span>
-          </div>
-          <div className="flex-1">
-            <h1 className="font-black text-gray-900">{agent.name}</h1>
-            <p className="text-xs text-gray-500">{agent.tagline}</p>
-          </div>
-          {agent.category && (
-            <span className="hidden md:block px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">
-              {agent.category}
-            </span>
-          )}
+      <div className="border-b border-gray-100 px-6 py-3 flex items-center gap-3">
+        <Link href="/agents" className="text-gray-400 hover:text-gray-700 transition-colors">
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center text-xl">
+          <span>{agent.emoji}</span>
+        </div>
+        <div className="flex-1">
+          <h1 className="font-bold text-gray-900 text-sm">{agent.name}</h1>
+          <p className="text-xs text-gray-500">{agent.tagline}</p>
         </div>
       </div>
 
       {/* MESSAGES */}
-      <div className="flex-1 overflow-y-auto px-6 py-8">
-        <div className="max-w-3xl mx-auto space-y-6">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
           {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={"flex gap-3 " + (msg.role === "user" ? "justify-end" : "")}
-            >
-              {msg.role === "assistant" && (
-                <div
-                  className={
-                    "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-gradient-to-br " +
-                    gradient +
-                    " text-white"
-                  }
-                >
-                  <Sparkles className="w-4 h-4" />
+            <div key={i} className="flex gap-3">
+              {msg.role === "assistant" ? (
+                <>
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center flex-shrink-0">
+                    <Sparkles className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0 pt-1">
+                    {msg.content ? (
+                      <MarkdownView content={msg.content} />
+                    ) : (
+                      <div className="flex items-center gap-1 text-gray-400 pt-2">
+                        <span className="w-2 h-2 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "0ms" }} />
+                        <span className="w-2 h-2 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "150ms" }} />
+                        <span className="w-2 h-2 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "300ms" }} />
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 flex justify-end">
+                  <div className="bg-gray-100 text-gray-900 rounded-3xl px-5 py-3 text-sm leading-relaxed max-w-[80%]">
+                    {msg.image && (
+                      <img
+                        src={msg.image}
+                        alt="photo"
+                        className="rounded-2xl max-h-64 mb-2 object-cover"
+                      />
+                    )}
+                    {msg.content && msg.content !== "(photo)" && (
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    )}
+                  </div>
                 </div>
               )}
-              <div
-                className={
-                  "max-w-full min-w-0 " +
-                  (msg.role === "user"
-                    ? "bg-gray-900 text-white rounded-2xl px-4 py-3 text-sm leading-relaxed"
-                    : "text-gray-800")
-                }
-              >
-                {msg.role === "user" ? (
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
-                ) : (
-                  <MarkdownView content={msg.content} />
-                )}
-              </div>
             </div>
           ))}
-
-          {loading && (
-            <div className="flex gap-3">
-              <div
-                className={
-                  "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-gradient-to-br " +
-                  gradient +
-                  " text-white"
-                }
-              >
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <div className="flex items-center gap-1 text-gray-400 text-sm pt-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "300ms" }} />
-              </div>
-            </div>
-          )}
+          <div ref={bottomRef} />
         </div>
       </div>
 
       {/* INPUT */}
-      <div className="border-t border-gray-200 bg-white/80 backdrop-blur-sm px-6 py-4">
-        <div className="max-w-3xl mx-auto flex gap-2 bg-white border border-gray-200 rounded-2xl p-2 focus-within:border-blue-400 focus-within:shadow-md transition-all">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-            placeholder={"Pose ta question à " + agent.name + "..."}
-            disabled={loading}
-            className="flex-1 bg-transparent px-3 py-2 text-sm outline-none placeholder-gray-400"
-          />
-          <button
-            onClick={handleSend}
-            disabled={loading || !input.trim()}
-            className={
-              "bg-gradient-to-r " +
-              gradient +
-              " text-white font-bold rounded-xl px-4 py-2 text-sm flex items-center gap-1.5 disabled:opacity-40 transition-all"
-            }
-          >
-            <Send className="w-3.5 h-3.5" />
-          </button>
+      <div className="px-6 pb-6 pt-2">
+        <div className="max-w-3xl mx-auto">
+
+          {/* APERÇU PHOTO */}
+          {image && (
+            <div className="mb-2 inline-flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-2xl p-2">
+              <img src={image} alt="" className="w-12 h-12 rounded-xl object-cover" />
+              <span className="text-xs text-gray-600 font-medium">Photo prête</span>
+              <button
+                onClick={clearImage}
+                className="p-1 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-end gap-2 bg-white border border-gray-300 rounded-3xl px-3 py-2 shadow-sm focus-within:border-orange-400 focus-within:shadow-md transition-all">
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-gray-400 hover:text-orange-500 hover:bg-orange-50 transition-all flex-shrink-0"
+              title="Ajouter une photo"
+            >
+              <ImagePlus className="w-5 h-5" />
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              onChange={handlePhoto}
+              className="hidden"
+            />
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Pose ta question..."
+              disabled={loading}
+              rows={1}
+              className="flex-1 bg-transparent outline-none text-sm text-gray-900 placeholder-gray-400 resize-none max-h-40 py-2"
+            />
+            <button
+              onClick={handleSend}
+              disabled={loading || (!input.trim() && !image)}
+              className="w-9 h-9 rounded-full bg-orange-500 hover:bg-orange-600 disabled:bg-gray-200 disabled:cursor-not-allowed flex items-center justify-center transition-colors flex-shrink-0"
+            >
+              <Send className="w-4 h-4 text-white" />
+            </button>
+          </div>
+          <p className="text-center text-xs text-gray-400 mt-3">
+            BARRY AI peut faire des erreurs.
+          </p>
         </div>
-        <p className="text-center text-[10px] text-gray-400 mt-2">
-          Entrée pour envoyer
-        </p>
       </div>
     </div>
   );

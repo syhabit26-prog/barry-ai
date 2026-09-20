@@ -36,6 +36,10 @@ function getEditorModel(provider: string) {
   return groq("openai/gpt-oss-120b");
 }
 
+function getVisionModel() {
+  return groq("meta-llama/llama-4-scout-17b-16e-instruct");
+}
+
 function extractName(prompt: string): string {
   const m = prompt.match(/(?:nommée?|appelée?|nom)\s+([a-zA-ZÀ-ÿ0-9][a-zA-ZÀ-ÿ0-9\s'-]{1,25})/i);
   if (m) {
@@ -112,33 +116,34 @@ export async function POST(req: Request) {
 
     const isChat = messages && Array.isArray(messages) && messages.length > 0;
     const dernierMessage = isChat ? messages[messages.length - 1].content : prompt || "";
-    const mode = manualMode || detectMode(dernierMessage);
+    const mode = manualMode || detectMode(typeof dernierMessage === "string" ? dernierMessage : "");
     const selectedProvider = provider || "groq";
+    const hasImage = body.hasImage === true;
 
-    console.log("🎯 Mode:", mode);
+    console.log("🎯 Mode:", mode, "| Image:", hasImage);
 
     // ═══════════════════════════════════════════════════════
-    // MODE CHAT + DÉTECTION D'AGENT
+    // MODE CHAT + DÉTECTION D'AGENT + VISION
     // ═══════════════════════════════════════════════════════
     if (mode === "chat" || customSystemPrompt) {
-      // ⭐ Si pas de customSystemPrompt, on essaie de détecter un agent
-      if (!customSystemPrompt) {
+      const chatModel = hasImage ? getVisionModel() : getModel(selectedProvider);
+
+      // Détection d'agent (uniquement sans image)
+      if (!customSystemPrompt && !hasImage) {
         try {
           const { findAgentInMessage } = await import("@/lib/allAgents");
-          const detectedAgent = findAgentInMessage(dernierMessage);
+          const detectedAgent = findAgentInMessage(typeof dernierMessage === "string" ? dernierMessage : "");
 
           if (detectedAgent) {
-            console.log("🤖 Agent détecté:", detectedAgent.name, "(" + detectedAgent.slug + ")");
+            console.log("🤖 Agent détecté:", detectedAgent.name);
 
             const result = streamText({
-              model: getModel(selectedProvider),
+              model: chatModel,
               system:
                 BARRY_IDENTITY +
                 "\n\n" +
                 detectedAgent.systemPrompt +
-                "\n\n⚠️ RÈGLE : Présente-toi au début en disant que tu es " +
-                detectedAgent.name +
-                ". Reste dans ton domaine. Si la question est hors sujet, redirige poliment l'utilisateur.",
+                "\n\n⚠️ Présente-toi comme " + detectedAgent.name + " au début.",
               messages: isChat ? messages : [{ role: "user", content: dernierMessage }],
             });
 
@@ -149,13 +154,15 @@ export async function POST(req: Request) {
         }
       }
 
-      // Chat normal
+      // Chat normal (avec ou sans image)
       const systemPrompt = customSystemPrompt
         ? BARRY_IDENTITY + "\n\n" + customSystemPrompt
         : BARRY_IDENTITY;
 
+      console.log("💬 Chat", hasImage ? "AVEC IMAGE" : "texte");
+
       const result = streamText({
-        model: getModel(selectedProvider),
+        model: chatModel,
         system: systemPrompt,
         messages: isChat ? messages : [{ role: "user", content: dernierMessage }],
       });
@@ -243,9 +250,9 @@ export async function POST(req: Request) {
     // ═══════════════════════════════════════════════════════
     if (mode === "code") {
       const { findGameCategory } = await import("@/lib/gameCategories");
-      const gameCat = findGameCategory(dernierMessage);
+      const gameCat = findGameCategory(typeof dernierMessage === "string" ? dernierMessage : "");
 
-      if (gameCat && dernierMessage.toLowerCase().match(/jeu|jeux|game/)) {
+      if (gameCat && typeof dernierMessage === "string" && dernierMessage.toLowerCase().match(/jeu|jeux|game/)) {
         const { getGameTemplate } = await import("@/lib/gameTemplates");
         const template = getGameTemplate(gameCat.id);
         if (template) {
@@ -259,15 +266,21 @@ export async function POST(req: Request) {
         }
       }
 
-      const type = detectSiteType(dernierMessage);
-      let name = customization?.name || customization?.storeName || extractName(dernierMessage);
+      const type = detectSiteType(typeof dernierMessage === "string" ? dernierMessage : "");
+      let name = customization?.name || customization?.storeName || extractName(typeof dernierMessage === "string" ? dernierMessage : "");
       if (name.length > 30) name = name.slice(0, 30).trim();
 
       const color = customization?.color
         ? getColors(typeof customization.color === "string" ? customization.color : customization.color?.name || "jaune")
         : getSiteColor(name, type);
 
-      const config = buildSiteConfig(dernierMessage, name, `Découvrez ${name}`, color, customization?.mood?.name || customization?.mood || "moderne");
+      const config = buildSiteConfig(
+        typeof dernierMessage === "string" ? dernierMessage : "",
+        name,
+        `Découvrez ${name}`,
+        color,
+        customization?.mood?.name || customization?.mood || "moderne"
+      );
 
       let photos: string[] = [];
       try {
@@ -345,9 +358,15 @@ export async function POST(req: Request) {
     // MODE DROPSHIPPING
     // ═══════════════════════════════════════════════════════
     if (mode === "dropshipping") {
-      const storeName = customization?.storeName || extractName(dernierMessage);
+      const storeName = customization?.storeName || extractName(typeof dernierMessage === "string" ? dernierMessage : "");
 
-      const normalizedPrompt = dernierMessage.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s_-]/g, " ").replace(/\s+/g, " ").trim();
+      const normalizedPrompt = (typeof dernierMessage === "string" ? dernierMessage : "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9\s_-]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
 
       const stopWords = ["cree", "creer", "genere", "fais", "faire", "moi", "une", "un", "des", "de", "du", "d", "la", "le", "les", "boutique", "shop", "store", "magasin", "en ligne", "pour", "avec", "sur", "dropshipping", "vendre", "veux"];
       let keyword = normalizedPrompt;
@@ -409,7 +428,7 @@ export async function POST(req: Request) {
 
       const { computeSignature } = await import("@/lib/animator");
       const uniqueSalt = Date.now() + "-" + Math.random().toString(36).slice(2, 10);
-      const signature = computeSignature(dernierMessage + "|" + keyword + "|" + uniqueSalt);
+      const signature = computeSignature((typeof dernierMessage === "string" ? dernierMessage : "") + "|" + keyword + "|" + uniqueSalt);
 
       const colorKey = customization?.color;
       const color = colorKey

@@ -2,6 +2,16 @@ import { AGENTS as DETAILED_AGENTS } from "./agents";
 import { AGENTS as SIMPLE_AGENTS } from "./agentCategories";
 import { CODE_AGENTS } from "./codeAgents";
 
+// ⭐ RÈGLE DE SPÉCIALITÉ STRICTE — appliquée à tous les agents
+const SPECIALTY_RULE = (name: string, domain: string) => `
+⚠️ RÈGLE DE SPÉCIALITÉ :
+Tu es UNIQUEMENT expert en **${domain}**.
+Si la question sort de ton domaine, réponds en UNE PHRASE COURTE, exactement :
+"Désolé, ce n'est pas mon domaine. Je suis **${name}**. Cherche l'expert qu'il te faut sur /agents."
+Ne rajoute AUCUN détail. Ne répète PAS ton domaine. Ne réponds JAMAIS à une question hors-sujet.
+
+`;
+
 export type UnifiedAgent = {
   slug: string;
   name: string;
@@ -26,7 +36,7 @@ const CATEGORY_EMOJI: Record<string, string> = {
 
 // ═══ EMOJIS SPÉCIFIQUES ═══
 const EMOJI_RULES: Array<[RegExp, string]> = [
-  [/dev react|dev react/i, "⚛️"], [/dev next/i, "▲"], [/dev vue/i, "💚"],
+  [/dev react|react/i, "⚛️"], [/dev next/i, "▲"], [/dev vue/i, "💚"],
   [/dev angular/i, "🅰️"], [/dev svelte/i, "🔥"], [/dev typescript/i, "🟦"],
   [/dev javascript/i, "🟨"], [/dev python/i, "🐍"], [/dev rust/i, "🦀"],
   [/dev golang|dev go/i, "🐹"], [/dev java/i, "☕"], [/dev c#|csharp/i, "🟪"],
@@ -129,7 +139,9 @@ export const ALL_AGENTS: UnifiedAgent[] = [
     emoji: emojiFor(a.name, a.category),
     tagline: a.prompt.length > 50 ? a.prompt.slice(0, 50) + "..." : a.prompt,
     color: colorFor(a.category),
-    systemPrompt: `Tu es un expert en ${a.category}. ${a.prompt}. Réponds dans la langue de l'utilisateur.`,
+    systemPrompt:
+      SPECIALTY_RULE(a.name, a.category + " — " + a.prompt) +
+      `Tu es un expert en ${a.category}. ${a.prompt}. Réponds dans la langue de l'utilisateur.`,
     category: a.category,
   })),
 
@@ -140,7 +152,9 @@ export const ALL_AGENTS: UnifiedAgent[] = [
     emoji: emojiFor(a.name, a.category),
     tagline: a.prompt.length > 50 ? a.prompt.slice(0, 50) + "..." : a.prompt,
     color: colorFor(a.category),
-    systemPrompt: `Tu es un expert développeur en ${a.name}. ${a.prompt}. Donne du code propre, testé, avec explications courtes. Réponds dans la langue de l'utilisateur.`,
+    systemPrompt:
+      SPECIALTY_RULE(a.name, a.prompt) +
+      `Tu es un expert développeur en ${a.name}. ${a.prompt}. Donne du code propre, testé, avec explications courtes. Réponds dans la langue de l'utilisateur.`,
     category: a.category,
   })),
 ];
