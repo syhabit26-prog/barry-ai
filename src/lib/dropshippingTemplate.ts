@@ -54,6 +54,8 @@ const FALLBACK_VIDEOS = [
   "https://videos.pexels.com/video-files/3184287/3184287-hd_1920_1080_25fps.mp4",
   "https://videos.pexels.com/video-files/3252918/3252918-hd_1920_1080_25fps.mp4",
   "https://videos.pexels.com/video-files/2795767/2795796-hd_1920_1080_25fps.mp4",
+  "https://videos.pexels.com/video-files/3571264/3571264-hd_1920_1080_30fps.mp4",
+  "https://videos.pexels.com/video-files/3209828/3209828-hd_1920_1080_25fps.mp4",
 ];
 
 function hashStr(s: string): number {
@@ -214,7 +216,8 @@ export function buildDropshippingSite(
 
       return `<div class="card" style="animation-delay:${delay}s">
         <div class="card-img">
-          <img src="${image}" alt="${name}" loading="lazy" onerror="this.src='https://placehold.co/400x400/f5f5f5/999?text=Produit'" />
+          <img src="${image}" alt="${name}" loading="lazy" 
+               onerror="this.onerror=null;this.src='https://placehold.co/600x600/1a1a1a/facc15?text=${encodeURIComponent(name)}'" />
           ${badge ? `<span class="card-badge">${badge}</span>` : ""}
         </div>
         <div class="card-body">
@@ -257,8 +260,11 @@ ${cardKeyframe}
 .progress-bar{position:fixed;top:0;left:0;height:3px;width:0%;background:${accentColor};z-index:9999;transition:width .1s linear;box-shadow:0 0 20px ${accentColor}}
 header{position:fixed;top:3px;left:0;right:0;z-index:1000;background:${palette.bg}dd;backdrop-filter:blur(24px);border-bottom:1px solid ${palette.border};padding:16px 0;animation:slideDown 1s cubic-bezier(0.16,1,0.3,1) both}
 .nav{max-width:1400px;margin:0 auto;padding:0 32px;display:flex;align-items:center;justify-content:space-between;gap:32px}
-.logo{font-size:22px;font-weight:700;color:${accentColor};letter-spacing:-0.5px;transition:transform .3s}
-.logo:hover{transform:scale(1.08)}
+.logo{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:700;color:${accentColor};letter-spacing:-0.5px;transition:transform .3s;text-decoration:none}
+.logo-mark{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,${accentColor},${accent2});color:${accentTextColor};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;box-shadow:0 4px 12px ${accentColor}50}
+.logo-text{font-size:20px;font-weight:800}
+.logo:hover{transform:scale(1.03)}
+.logo:hover .logo-mark{transform:rotate(-8deg);transition:transform .3s}
 .nav nav{display:flex;gap:28px;font-size:14px;font-weight:500}
 .nav nav a{color:${palette.text};opacity:.7;transition:color .3s}
 .nav nav a:hover{opacity:1;color:${accentColor}}
@@ -370,7 +376,10 @@ footer p{font-size:13px;opacity:.5;margin-bottom:8px}
 <div class="progress-bar" id="progressBar"></div>
 <header>
   <div class="nav">
-    <a href="#" class="logo">${storeName}</a>
+    <a href="#" class="logo">
+      <span class="logo-mark">${storeName.slice(0, 1).toUpperCase()}</span>
+      <span class="logo-text">${storeName}</span>
+    </a>
     <nav><a href="#products">Boutique</a><a href="#contact">Contact</a></nav>
     <button class="cart-btn" onclick="openCart()">Panier <span class="cart-badge" id="cartCount">0</span></button>
   </div>
@@ -420,7 +429,10 @@ footer p{font-size:13px;opacity:.5;margin-bottom:8px}
   </div>
 </section>
 <footer id="contact">
-  <p><strong style="font-size:16px;opacity:1;color:${accentColor}">${storeName}</strong></p>
+  <div style="display:flex;justify-content:center;align-items:center;gap:12px;margin-bottom:16px">
+    <span class="logo-mark" style="width:44px;height:44px;font-size:22px">${storeName.slice(0, 1).toUpperCase()}</span>
+    <strong style="font-size:20px;color:${accentColor}">${storeName}</strong>
+  </div>
   <p>${tagline}</p>
   <p>2026 ${storeName} - Paiement sécurisé Stripe & PayPal</p>
   <div style="margin-top:12px;display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
