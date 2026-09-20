@@ -1,945 +1,392 @@
-import { SiteConfig } from "./siteTemplates";
+// src/lib/multiPageGenerator.ts
+import type { SiteConfig } from "./siteTemplates";
 
-// ═══════════════════════════════════════════════════════════════
-// Types
-// ═══════════════════════════════════════════════════════════════
-type CinematicAssets = {
+const VIDEO_POOL = [
+  "https://videos.pexels.com/video-files/3184287/3184287-hd_1920_1080_25fps.mp4",
+  "https://videos.pexels.com/video-files/3252918/3252918-hd_1920_1080_25fps.mp4",
+  "https://videos.pexels.com/video-files/2795767/2795796-hd_1920_1080_25fps.mp4",
+  "https://videos.pexels.com/video-files/3571264/3571264-hd_1920_1080_30fps.mp4",
+  "https://videos.pexels.com/video-files/3209828/3209828-hd_1920_1080_25fps.mp4",
+];
+
+function pickVideo(seed: number) {
+  return VIDEO_POOL[Math.abs(seed) % VIDEO_POOL.length];
+}
+
+export type BuildOptions = {
   heroVideoUrl?: string;
-  galleryPhotos?: string[];
   extraVideos?: string[];
+  galleryPhotos?: string[];
   model3DUrl?: string;
 };
 
-type DesignProfile = {
-  fontDisplay: string;
-  fontBody: string;
-  heroLayout: string;
-  sectionSpacing: number;
-  borderRadius: number;
-  cardLayout: string;
-};
+export function buildMultiPageSite(config: SiteConfig, opts: BuildOptions = {}): string {
+  const { name, tagline, color, content, animations } = config;
+  const primary = color.primary;
+  const secondary = color.secondary;
 
-// ═══════════════════════════════════════════════════════════════
-// Hash + profil unique par site
-// ═══════════════════════════════════════════════════════════════
-function hashString(str: string): number {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) {
-    h = (h * 31 + str.charCodeAt(i)) | 0;
-  }
-  return Math.abs(h);
-}
+  const heroVideo = opts.heroVideoUrl || pickVideo(name.length);
+  const midVideo = opts.extraVideos?.[0] || pickVideo(name.length + 1);
+  const endVideo = opts.extraVideos?.[1] || pickVideo(name.length + 2);
 
-function generateProfile(seed: string): DesignProfile {
-  const h = hashString(seed);
-
-  const fonts: Array<{ display: string; body: string }> = [
-    { display: "Space Grotesk", body: "Inter" },
-    { display: "Outfit", body: "DM Sans" },
-    { display: "Sora", body: "Manrope" },
-    { display: "Poppins", body: "Inter" },
-    { display: "Playfair Display", body: "Inter" },
+  const photos = opts.galleryPhotos || [
+    `https://image.pollinations.ai/prompt/${encodeURIComponent(name + " professional")}?width=800&height=600&nologo=true`,
   ];
 
-  const layouts: string[] = ["left", "center", "split"];
-  const cardLayouts: string[] = ["grid", "offset", "masonry"];
-  const spacings: number[] = [80, 120, 160];
-  const radii: number[] = [0, 12, 24];
-
-  const font = fonts[h % fonts.length];
-  const heroLayout = layouts[h % layouts.length];
-  const cardLayout = cardLayouts[(h + 1) % cardLayouts.length];
-  const spacing = spacings[(h + 2) % spacings.length];
-  const radius = radii[(h + 3) % radii.length];
-
-  return {
-    fontDisplay: font.display,
-    fontBody: font.body,
-    heroLayout,
-    sectionSpacing: spacing,
-    borderRadius: radius,
-    cardLayout,
+  const primaryAnim = animations?.[0] || "fade";
+  const animConfig: Record<string, { from: string; to: string }> = {
+    fade: { from: "opacity:0;", to: "opacity:1;" },
+    slide: { from: "opacity:0;transform:translateY(40px);", to: "opacity:1;transform:translateY(0);" },
+    zoom: { from: "opacity:0;transform:scale(0.92);", to: "opacity:1;transform:scale(1);" },
+    float: { from: "opacity:0;transform:translateY(30px);", to: "opacity:1;transform:translateY(0);" },
+    gradient: { from: "opacity:0;transform:translateY(30px);", to: "opacity:1;transform:translateY(0);" },
   };
-}
+  const activeAnim = animConfig[primaryAnim] || animConfig.slide;
 
-// ═══════════════════════════════════════════════════════════════
-// HERO — Cinématique avec vidéo de fond
-// ═══════════════════════════════════════════════════════════════
-function buildHero(
-  config: SiteConfig,
-  assets: CinematicAssets,
-  profile: DesignProfile,
-  primary: string
-): string {
-  const video = assets.heroVideoUrl
-    ? `<video class="hero-video" autoplay muted loop playsinline preload="metadata"><source src="${assets.heroVideoUrl}" type="video/mp4"></video>`
-    : `<div class="hero-gradient"></div>`;
-
-  const textAlign = profile.heroLayout === "center" ? "center" : "left";
-  const alignItems = profile.heroLayout === "center" ? "center" : "flex-start";
-
-  const secondPage = config.pages[1] || "contact";
-  const secondSlug = secondPage.toLowerCase().replace(/\s+/g, "-");
-
-  return `
-<section id="home" class="page active hero">
-  ${video}
-  <div class="hero-vignette"></div>
-  <div class="hero-content" style="text-align:${textAlign};align-items:${alignItems}">
-    <div class="hero-meta">
-      <span class="hero-dot" style="background:${primary}"></span>
-      <span>${config.content.hero.title}</span>
+  // ─── Génère les sections dynamiquement ───
+  const servicesHTML = content.services.map((s) => `
+    <div class="card hover-lift reveal">
+      <div class="card-icon">${s.icon}</div>
+      <h3 class="card-title">${s.title}</h3>
+      <p class="card-desc">${s.desc}</p>
     </div>
-    <h1 class="hero-display">
-      <span class="hero-line">${config.name}</span>
-    </h1>
-    <p class="hero-sub">${config.content.hero.subtitle}</p>
-    <div class="hero-actions">
-      <a href="#${secondSlug}" class="btn-primary" data-page>
-        <span>${config.content.hero.cta}</span>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </a>
-      <a href="#contact" class="btn-ghost" data-page>Nous contacter</a>
-    </div>
-  </div>
-  <div class="hero-scroll">
-    <span class="hero-scroll-text">SCROLL</span>
-    <span class="hero-scroll-line"></span>
-  </div>
-</section>`;
-}
+  `).join("");
 
-// ═══════════════════════════════════════════════════════════════
-// SERVICES — Cartes
-// ═══════════════════════════════════════════════════════════════
-function buildServices(config: SiteConfig, profile: DesignProfile, primary: string): string {
-  const gridClass =
-    profile.cardLayout === "offset"
-      ? "services-offset"
-      : profile.cardLayout === "masonry"
-      ? "services-masonry"
-      : "services-grid";
-
-  const cards = config.content.services
-    .map(
-      (s, i) => `
-    <article class="service-card" data-reveal data-delay="${i * 80}" style="border-radius:${profile.borderRadius}px">
-      <div class="service-number" style="color:${primary}">${String(i + 1).padStart(2, "0")}</div>
-      <div class="service-icon">${s.icon}</div>
-      <h3 class="service-title">${s.title}</h3>
-      <p class="service-desc">${s.desc}</p>
-    </article>
-  `
-    )
-    .join("");
-
-  return `<div class="${gridClass}">${cards}</div>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// STATS
-// ═══════════════════════════════════════════════════════════════
-function buildStats(config: SiteConfig): string {
-  const items = config.content.stats
-    .map(
-      (s) => `
-    <div class="stat">
+  const statsHTML = content.stats.map((s) => `
+    <div class="stat reveal">
       <div class="stat-value">${s.value}</div>
       <div class="stat-label">${s.label}</div>
     </div>
-  `
-    )
-    .join("");
+  `).join("");
 
-  return `<div class="stats-section" data-reveal>${items}</div>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// TESTIMONIALS
-// ═══════════════════════════════════════════════════════════════
-function buildTestimonials(config: SiteConfig): string {
-  const items = config.content.testimonials
-    .map(
-      (t, i) => `
-    <div class="testimonial" data-reveal data-delay="${i * 100}">
-      <div class="testimonial-quote">"${t.text}"</div>
+  const testimonialsHTML = content.testimonials.map((t) => `
+    <div class="testimonial hover-lift reveal">
+      <div class="testimonial-stars">★★★★★</div>
+      <p class="testimonial-text">"${t.text}"</p>
       <div class="testimonial-author">
         <img src="${t.avatar}" alt="${t.name}" loading="lazy" />
         <div>
-          <div class="author-name">${t.name}</div>
-          <div class="author-role">${t.role}</div>
+          <div class="testimonial-name">${t.name}</div>
+          <div class="testimonial-role">${t.role}</div>
         </div>
       </div>
     </div>
-  `
-    )
-    .join("");
+  `).join("");
 
-  return `<div class="testimonials-grid">${items}</div>`;
-}
+  const faqHTML = content.faq.map((f) => `
+    <details class="faq-item reveal">
+      <summary>${f.q}</summary>
+      <p>${f.a}</p>
+    </details>
+  `).join("");
 
-// ═══════════════════════════════════════════════════════════════
-// GALERIE — Photos + Vidéos (avec safe defaults)
-// ═══════════════════════════════════════════════════════════════
-function buildGallery(assets: CinematicAssets): string {
-  let output = "";
-  const videos: string[] = assets.extraVideos || [];
-  const photos: string[] = assets.galleryPhotos || [];
-
-  if (videos.length > 0) {
-    output += `<div class="video-showcase" data-reveal>`;
-    output += videos
-      .slice(0, 2)
-      .map(
-        (v) =>
-          `<div class="video-tile"><video autoplay muted loop playsinline preload="metadata"><source src="${v}" type="video/mp4"></video></div>`
-      )
-      .join("");
-    output += `</div>`;
-  }
-
-  if (photos.length > 0) {
-    output += `<div class="photo-masonry">`;
-    output += photos
-      .map(
-        (url, i) =>
-          `<div class="photo-tile" data-reveal data-delay="${i * 60}"><img src="${url}" alt="Photo ${i + 1}" loading="lazy" /></div>`
-      )
-      .join("");
-    output += `</div>`;
-  }
-
-  if (output === "") {
-    output = `<p style="opacity:0.5;text-align:center;padding:60px 0">Aucun média pour le moment.</p>`;
-  }
-
-  return output;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// PAGE GÉNÉRIQUE
-// ═══════════════════════════════════════════════════════════════
-function buildPage(
-  config: SiteConfig,
-  title: string,
-  profile: DesignProfile,
-  primary: string,
-  assets: CinematicAssets
-): string {
-  const slug = title.toLowerCase().replace(/\s+/g, "-");
-  const tl = title.toLowerCase();
-
-  let content = "";
-
-  if (tl === "galerie") {
-    content = buildGallery(assets);
-  } else if (
-    /service|produit|menu|formation|cours|domaine|solution|chambre|mission|particulier|entreprise|technolog|offre|tarif|destination|coach/.test(
-      tl
-    )
-  ) {
-    content = buildServices(config, profile, primary) + buildStats(config);
-  } else if (/projet|réalis|bien|actualit|équipe|règles|score/.test(tl)) {
-    content = buildTestimonials(config);
-  } else if (/propos|admission|agence|vie scolaire/.test(tl)) {
-    content = buildStats(config) + buildTestimonials(config);
-  } else {
-    content = buildServices(config, profile, primary);
-  }
-
-  return `
-<section id="${slug}" class="page">
-  <div class="page-inner">
-    <header class="page-header" data-reveal>
-      <span class="page-badge" style="color:${primary}">${title}</span>
-      <h2 class="page-title">${title}</h2>
-      <p class="page-sub">Découvrez ${tl} de ${config.name}</p>
-    </header>
-    ${content}
-  </div>
-</section>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// CONTACT
-// ═══════════════════════════════════════════════════════════════
-function buildContact(config: SiteConfig): string {
-  return `
-<section id="contact" class="page">
-  <div class="page-inner">
-    <header class="page-header" data-reveal>
-      <span class="page-badge">Contact</span>
-      <h2 class="page-title">Discutons ensemble</h2>
-      <p class="page-sub">Nous répondons en moins de 24h</p>
-    </header>
-    <form class="contact-form" data-reveal onsubmit="submitContact(event)">
-      <div class="form-row">
-        <input type="text" placeholder="Nom complet" required />
-        <input type="email" placeholder="Email" required />
-      </div>
-      <input type="text" placeholder="Sujet" />
-      <textarea rows="5" placeholder="Votre message..." required></textarea>
-      <button type="submit" class="btn-primary">Envoyer le message</button>
-    </form>
-  </div>
-</section>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// CTA FINAL
-// ═══════════════════════════════════════════════════════════════
-function buildCTA(config: SiteConfig, primary: string): string {
-  return `
-<section class="cta-section" data-reveal>
-  <div class="cta-inner" style="border-color:${primary}30">
-    <h2 class="cta-title">${config.content.cta.title}</h2>
-    <p class="cta-sub">${config.content.cta.subtitle}</p>
-    <a href="#contact" class="btn-primary" data-page>
-      <span>${config.content.cta.button}</span>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-    </a>
-  </div>
-</section>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// STYLES
-// ═══════════════════════════════════════════════════════════════
-function buildStyles(
-  config: SiteConfig,
-  profile: DesignProfile,
-  primary: string,
-  secondary: string
-): string {
-  const spacing = profile.sectionSpacing;
-  const radius = profile.borderRadius;
-
-  return `
-* { margin:0; padding:0; box-sizing:border-box; }
-html { scroll-behavior:smooth; -webkit-font-smoothing:antialiased; }
-body {
-  font-family:'${profile.fontBody}', -apple-system, sans-serif;
-  background:#050505; color:#fff;
-  line-height:1.6; overflow-x:hidden;
-}
-
-.site-header {
-  position:fixed; top:0; left:0; right:0; z-index:1000;
-  backdrop-filter:blur(24px) saturate(180%);
-  background:rgba(5,5,5,0.6);
-  border-bottom:1px solid rgba(255,255,255,0.05);
-}
-.nav-wrapper {
-  max-width:1500px; margin:0 auto; padding:20px 40px;
-  display:flex; align-items:center; justify-content:space-between;
-}
-.logo {
-  font-family:'${profile.fontDisplay}', sans-serif;
-  font-size:20px; font-weight:700; color:#fff;
-  text-decoration:none; letter-spacing:-0.5px;
-}
-.nav-links { display:flex; gap:36px; }
-.nav-links a {
-  color:rgba(255,255,255,0.55); text-decoration:none;
-  font-size:13px; font-weight:500; transition:color 0.3s;
-}
-.nav-links a:hover { color:#fff; }
-.menu-btn { display:none; background:none; border:none; color:#fff; font-size:24px; cursor:pointer; }
-
-.page { display:none; }
-.page.active { display:block; animation:pageIn 0.8s cubic-bezier(0.16,1,0.3,1) both; }
-@keyframes pageIn {
-  from { opacity:0; transform:translateY(24px); filter:blur(8px); }
-  to { opacity:1; transform:translateY(0); filter:blur(0); }
-}
-
-/* HERO */
-.hero {
-  position:relative; min-height:100vh;
-  display:flex; align-items:center;
-  padding:140px 60px 100px;
-  overflow:hidden;
-}
-.hero-video {
-  position:absolute; top:50%; left:50%;
-  min-width:100%; min-height:100%;
-  width:auto; height:auto;
-  transform:translate(-50%,-50%);
-  object-fit:cover; z-index:0;
-  filter:saturate(0.9) brightness(0.5);
-}
-.hero-gradient {
-  position:absolute; inset:0; z-index:0;
-  background:
-    radial-gradient(circle at 20% 30%, ${primary}20 0%, transparent 50%),
-    radial-gradient(circle at 80% 70%, ${secondary}20 0%, transparent 50%);
-}
-.hero-vignette {
-  position:absolute; inset:0; z-index:1;
-  background:linear-gradient(180deg, rgba(5,5,5,0.3) 0%, rgba(5,5,5,0.7) 60%, rgba(5,5,5,1) 100%);
-}
-.hero-content {
-  position:relative; z-index:2;
-  display:flex; flex-direction:column;
-  max-width:1500px; width:100%; margin:0 auto;
-  gap:24px;
-}
-.hero-meta {
-  display:inline-flex; align-items:center; gap:10px;
-  font-size:12px; font-weight:500;
-  letter-spacing:0.2em; text-transform:uppercase;
-  color:rgba(255,255,255,0.7);
-}
-.hero-dot {
-  width:8px; height:8px; border-radius:50%;
-  animation:pulse 2s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%, 100% { opacity:1; transform:scale(1); }
-  50% { opacity:0.4; transform:scale(1.2); }
-}
-.hero-display {
-  font-family:'${profile.fontDisplay}', sans-serif;
-  font-size:clamp(56px, 11vw, 160px);
-  font-weight:700; line-height:0.95;
-  letter-spacing:-0.05em; margin:0;
-  background:linear-gradient(180deg, #fff 0%, rgba(255,255,255,0.6) 100%);
-  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-  background-clip:text;
-  max-width:1200px;
-}
-.hero-line {
-  display:block;
-  opacity:0; transform:translateY(100%);
-  animation:heroReveal 1.4s cubic-bezier(0.16,1,0.3,1) 0.3s forwards;
-}
-@keyframes heroReveal {
-  to { opacity:1; transform:translateY(0); }
-}
-.hero-sub {
-  font-size:clamp(16px, 1.6vw, 22px);
-  color:rgba(255,255,255,0.65);
-  max-width:560px; line-height:1.5;
-  opacity:0; animation:fadeUp 1s cubic-bezier(0.16,1,0.3,1) 0.6s forwards;
-}
-.hero-actions {
-  display:flex; gap:16px; flex-wrap:wrap;
-  margin-top:16px;
-  opacity:0; animation:fadeUp 1s cubic-bezier(0.16,1,0.3,1) 0.9s forwards;
-}
-@keyframes fadeUp {
-  from { opacity:0; transform:translateY(20px); }
-  to { opacity:1; transform:translateY(0); }
-}
-.hero-scroll {
-  position:absolute; bottom:40px; left:50%;
-  transform:translateX(-50%);
-  display:flex; flex-direction:column; align-items:center; gap:12px;
-  z-index:3; opacity:0.5;
-}
-.hero-scroll-text { font-size:11px; letter-spacing:0.3em; }
-.hero-scroll-line {
-  width:1px; height:40px;
-  background:linear-gradient(180deg, #fff, transparent);
-  animation:scrollLine 2s ease-in-out infinite;
-}
-@keyframes scrollLine {
-  0% { transform:scaleY(0); transform-origin:top; }
-  50% { transform:scaleY(1); transform-origin:top; }
-  51% { transform:scaleY(1); transform-origin:bottom; }
-  100% { transform:scaleY(0); transform-origin:bottom; }
-}
-
-/* BOUTONS */
-.btn-primary {
-  display:inline-flex; align-items:center; gap:12px;
-  padding:18px 32px;
-  background:${primary}; color:#000;
-  border-radius:${radius}px;
-  font-size:14px; font-weight:600;
-  text-decoration:none; cursor:pointer; border:none;
-  transition:all 0.3s cubic-bezier(0.16,1,0.3,1);
-  font-family:inherit;
-}
-.btn-primary:hover {
-  transform:translateY(-2px);
-  box-shadow:0 20px 40px ${primary}40;
-}
-.btn-ghost {
-  display:inline-flex; align-items:center;
-  padding:18px 32px;
-  background:transparent; color:#fff;
-  border:1px solid rgba(255,255,255,0.15);
-  border-radius:${radius}px;
-  font-size:14px; font-weight:500;
-  text-decoration:none; cursor:pointer;
-  transition:all 0.3s;
-  font-family:inherit;
-}
-.btn-ghost:hover {
-  background:rgba(255,255,255,0.05);
-  border-color:rgba(255,255,255,0.3);
-}
-
-/* PAGES */
-.page-inner { max-width:1500px; margin:0 auto; padding:${spacing}px 60px; }
-.page-header { max-width:900px; margin-bottom:80px; }
-.page-badge {
-  display:inline-block;
-  font-size:11px; font-weight:600;
-  letter-spacing:0.25em; text-transform:uppercase;
-  margin-bottom:20px;
-}
-.page-title {
-  font-family:'${profile.fontDisplay}', sans-serif;
-  font-size:clamp(40px, 6vw, 88px);
-  font-weight:700; line-height:1;
-  letter-spacing:-0.03em; margin-bottom:20px;
-}
-.page-sub {
-  font-size:18px;
-  color:rgba(255,255,255,0.5);
-  max-width:560px;
-}
-
-/* SERVICES */
-.services-grid {
-  display:grid;
-  grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));
-  gap:2px;
-  background:rgba(255,255,255,0.05);
-  border:1px solid rgba(255,255,255,0.05);
-  border-radius:${radius}px;
-  overflow:hidden;
-}
-.services-offset {
-  display:grid;
-  grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));
-  gap:32px;
-}
-.services-masonry {
-  display:grid;
-  grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));
-  gap:20px;
-}
-.service-card {
-  padding:48px 40px;
-  background:#0a0a0a;
-  transition:all 0.5s cubic-bezier(0.16,1,0.3,1);
-}
-.service-card:hover { background:#111; }
-.service-number {
-  font-family:'${profile.fontDisplay}', sans-serif;
-  font-size:14px; font-weight:600;
-  margin-bottom:32px;
-  letter-spacing:0.1em;
-}
-.service-icon { font-size:44px; margin-bottom:32px; display:block; }
-.service-title {
-  font-family:'${profile.fontDisplay}', sans-serif;
-  font-size:22px; font-weight:600;
-  letter-spacing:-0.01em; margin-bottom:14px;
-  color:#fff;
-}
-.service-desc { font-size:15px; color:rgba(255,255,255,0.5); line-height:1.6; }
-
-/* STATS */
-.stats-section {
-  display:grid;
-  grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
-  gap:40px;
-  margin:${spacing}px 0;
-  padding:${Math.floor(spacing / 2)}px 0;
-  border-top:1px solid rgba(255,255,255,0.08);
-  border-bottom:1px solid rgba(255,255,255,0.08);
-}
-.stat { text-align:left; }
-.stat-value {
-  font-family:'${profile.fontDisplay}', sans-serif;
-  font-size:clamp(48px, 5vw, 72px);
-  font-weight:700; line-height:1;
-  letter-spacing:-0.03em;
-  color:${primary};
-  margin-bottom:12px;
-}
-.stat-label {
-  font-size:12px;
-  letter-spacing:0.2em; text-transform:uppercase;
-  color:rgba(255,255,255,0.4);
-}
-
-/* TESTIMONIALS */
-.testimonials-grid {
-  display:grid;
-  grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));
-  gap:24px;
-}
-.testimonial {
-  padding:40px 36px;
-  background:rgba(255,255,255,0.02);
-  border:1px solid rgba(255,255,255,0.06);
-  border-radius:${radius}px;
-  transition:all 0.4s;
-}
-.testimonial:hover {
-  border-color:${primary}40;
-  background:rgba(255,255,255,0.04);
-}
-.testimonial-quote {
-  font-family:'${profile.fontDisplay}', sans-serif;
-  font-size:20px; line-height:1.5;
-  color:#fff; margin-bottom:32px;
-  letter-spacing:-0.01em;
-}
-.testimonial-author { display:flex; align-items:center; gap:14px; }
-.testimonial-author img { width:48px; height:48px; border-radius:50%; object-fit:cover; }
-.author-name { font-size:14px; font-weight:600; color:#fff; }
-.author-role { font-size:12px; color:rgba(255,255,255,0.4); }
-
-/* GALLERY */
-.video-showcase {
-  display:grid; grid-template-columns:1fr 1fr;
-  gap:20px; margin-bottom:60px;
-}
-.video-tile {
-  aspect-ratio:16/9;
-  overflow:hidden;
-  border-radius:${radius}px;
-  background:#111;
-}
-.video-tile video { width:100%; height:100%; object-fit:cover; display:block; }
-.photo-masonry { columns:3 320px; column-gap:20px; }
-.photo-tile {
-  break-inside:avoid;
-  margin-bottom:20px;
-  border-radius:${radius}px;
-  overflow:hidden;
-  background:#111;
-}
-.photo-tile img { width:100%; height:auto; display:block; transition:transform 0.6s; }
-.photo-tile:hover img { transform:scale(1.03); }
-
-/* CTA */
-.cta-section { padding:${spacing}px 60px; }
-.cta-inner {
-  max-width:1200px; margin:0 auto;
-  padding:100px 60px;
-  border:1px solid ${primary}30;
-  border-radius:${radius}px;
-  background:
-    radial-gradient(circle at 30% 30%, ${primary}15 0%, transparent 60%),
-    radial-gradient(circle at 70% 70%, ${secondary}15 0%, transparent 60%),
-    rgba(255,255,255,0.01);
-  text-align:center;
-}
-.cta-title {
-  font-family:'${profile.fontDisplay}', sans-serif;
-  font-size:clamp(40px, 5vw, 72px);
-  font-weight:700; letter-spacing:-0.03em;
-  line-height:1.05; margin-bottom:20px;
-}
-.cta-sub { font-size:18px; color:rgba(255,255,255,0.6); margin-bottom:40px; }
-
-/* CONTACT */
-.contact-form { max-width:700px; display:flex; flex-direction:column; gap:16px; }
-.form-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-.contact-form input,
-.contact-form textarea {
-  padding:20px 24px;
-  background:rgba(255,255,255,0.03);
-  border:1px solid rgba(255,255,255,0.08);
-  border-radius:${radius}px;
-  color:#fff;
-  font-size:15px;
-  font-family:inherit;
-  transition:all 0.3s;
-}
-.contact-form input:focus,
-.contact-form textarea:focus {
-  outline:none;
-  border-color:${primary};
-  background:rgba(255,255,255,0.05);
-}
-.contact-form textarea { resize:vertical; min-height:160px; }
-.contact-form button { align-self:flex-start; }
-
-/* FOOTER */
-.site-footer {
-  border-top:1px solid rgba(255,255,255,0.06);
-  padding:80px 60px 40px;
-  margin-top:${spacing}px;
-}
-.footer-inner {
-  max-width:1500px; margin:0 auto;
-  display:flex; justify-content:space-between; flex-wrap:wrap;
-  gap:40px; margin-bottom:60px;
-}
-.footer-logo {
-  font-family:'${profile.fontDisplay}', sans-serif;
-  font-size:24px; font-weight:700;
-  color:#fff; margin-bottom:8px;
-  letter-spacing:-0.02em;
-}
-.footer-tagline { font-size:14px; color:rgba(255,255,255,0.4); max-width:400px; }
-.footer-links { display:flex; gap:32px; flex-wrap:wrap; }
-.footer-links a {
-  color:rgba(255,255,255,0.4);
-  text-decoration:none;
-  font-size:14px;
-  transition:color 0.3s;
-}
-.footer-links a:hover { color:#fff; }
-.footer-bottom {
-  text-align:center;
-  font-size:12px;
-  color:rgba(255,255,255,0.3);
-  letter-spacing:0.1em;
-}
-
-/* REVEAL */
-[data-reveal] {
-  opacity:0;
-  transform:translateY(40px);
-  transition:opacity 1.2s cubic-bezier(0.16,1,0.3,1),
-             transform 1.2s cubic-bezier(0.16,1,0.3,1);
-}
-[data-reveal].visible { opacity:1; transform:translateY(0); }
-
-/* RESPONSIVE */
-@media (max-width:900px) {
-  .nav-links { display:none; }
-  .nav-links.open {
-    display:flex; flex-direction:column;
-    position:absolute; top:100%; left:0; right:0;
-    background:rgba(5,5,5,0.98);
-    padding:30px; gap:20px;
-  }
-  .menu-btn { display:block; }
-  .hero { padding:120px 24px 80px; }
-  .page-inner { padding:80px 24px; }
-  .cta-section { padding:80px 24px; }
-  .cta-inner { padding:60px 30px; }
-  .site-footer { padding:60px 24px 30px; }
-  .form-row { grid-template-columns:1fr; }
-  .video-showcase { grid-template-columns:1fr; }
-  .photo-masonry { columns:1; }
-  .stats-section { grid-template-columns:1fr 1fr; gap:24px; }
-}
-`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// SCRIPT — GSAP + Lenis
-// ═══════════════════════════════════════════════════════════════
-const SCRIPT = `
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.29/dist/lenis.min.js"></script>
-<script>
-(function() {
-  if (typeof Lenis === 'undefined') {
-    document.querySelectorAll('[data-reveal]').forEach(function(el) { el.classList.add('visible'); });
-  } else {
-    var lenis = new Lenis({
-      duration: 1.4,
-      easing: function(t) { return Math.min(1, 1.001 - Math.pow(2, -10 * t)); },
-      smoothWheel: true,
-    });
-    function raf(time) { lenis.raf(time); requestAnimationFrame(raf); }
-    requestAnimationFrame(raf);
-
-    if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
-      gsap.registerPlugin(ScrollTrigger);
-      lenis.on('scroll', ScrollTrigger.update);
-
-      document.querySelectorAll('[data-reveal]').forEach(function(el) {
-        var delay = parseInt(el.getAttribute('data-delay') || '0');
-        gsap.fromTo(el,
-          { opacity: 0, y: 60 },
-          {
-            opacity: 1, y: 0,
-            duration: 1.4,
-            ease: 'power3.out',
-            delay: delay / 1000,
-            scrollTrigger: {
-              trigger: el,
-              start: 'top 85%',
-              toggleActions: 'play none none reverse',
-            },
-          }
-        );
-      });
-
-      var heroVideo = document.querySelector('.hero-video');
-      if (heroVideo) {
-        gsap.to(heroVideo, {
-          scale: 1.15,
-          ease: 'none',
-          scrollTrigger: {
-            trigger: '.hero',
-            start: 'top top',
-            end: 'bottom top',
-            scrub: 1,
-          },
-        });
-      }
-
-      var heroTitle = document.querySelector('.hero-display');
-      if (heroTitle) {
-        gsap.to(heroTitle, {
-          y: 100,
-          opacity: 0.3,
-          ease: 'none',
-          scrollTrigger: {
-            trigger: '.hero',
-            start: 'top top',
-            end: 'bottom top',
-            scrub: 1,
-          },
-        });
-      }
-    }
-
-    window.__lenis = lenis;
-  }
-
-  document.querySelectorAll('[data-page]').forEach(function(link) {
-    link.addEventListener('click', function(e) {
-      e.preventDefault();
-      var target = this.getAttribute('href').replace('#', '');
-      showPage(target);
-      if (window.__lenis) window.__lenis.scrollTo(0, { immediate: true });
-      setTimeout(function() {
-        if (typeof ScrollTrigger !== 'undefined') ScrollTrigger.refresh();
-      }, 500);
-    });
-  });
-
-  function showPage(id) {
-    document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
-    var target = document.getElementById(id);
-    if (target) {
-      target.classList.add('active');
-      setTimeout(function() {
-        target.querySelectorAll('[data-reveal]').forEach(function(el) {
-          var rect = el.getBoundingClientRect();
-          if (rect.top < window.innerHeight * 0.85) el.classList.add('visible');
-        });
-      }, 100);
-    }
-  }
-
-  window.toggleMenu = function() {
-    document.querySelector('.nav-links').classList.toggle('open');
-  };
-
-  window.submitContact = function(e) {
-    e.preventDefault();
-    alert('Message envoyé !');
-    e.target.reset();
-  };
-})();
-</script>
-<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
-`;
-
-// ═══════════════════════════════════════════════════════════════
-// FONCTION PRINCIPALE
-// ═══════════════════════════════════════════════════════════════
-export function buildMultiPageSite(
-  config: SiteConfig,
-  assets?: CinematicAssets
-): string {
-  // Sécurité : toujours un objet avec les bonnes propriétés
-  const safeAssets: CinematicAssets = {
-    heroVideoUrl: assets && assets.heroVideoUrl ? assets.heroVideoUrl : undefined,
-    galleryPhotos: (assets && assets.galleryPhotos) || [],
-    extraVideos: (assets && assets.extraVideos) || [],
-    model3DUrl: assets && assets.model3DUrl ? assets.model3DUrl : undefined,
-  };
-
-  const profile = generateProfile(config.name + config.type + config.mood);
-  const primary = config.color.primary;
-  const secondary = config.color.secondary;
-
-  const header = `
-<header class="site-header">
-  <div class="nav-wrapper">
-    <a href="#home" class="logo" data-page>${config.name}</a>
-    <nav class="nav-links">
-      ${config.pages
-        .map(
-          (p) =>
-            '<a href="#' +
-            p.toLowerCase().replace(/\s+/g, "-") +
-            '" data-page>' +
-            p +
-            "</a>"
-        )
-        .join("")}
-    </nav>
-    <button class="menu-btn" onclick="toggleMenu()">☰</button>
-  </div>
-</header>`;
-
-  let pagesHTML = "";
-  for (let i = 0; i < config.pages.length; i++) {
-    const page = config.pages[i];
-    if (page === "Accueil") continue;
-    if (page === "Contact") {
-      pagesHTML += buildContact(config);
-      continue;
-    }
-    pagesHTML += buildPage(config, page, profile, primary, safeAssets);
-  }
-
-  const footer = `
-<footer class="site-footer">
-  <div class="footer-inner">
-    <div>
-      <div class="footer-logo">${config.name}</div>
-      <div class="footer-tagline">${config.tagline}</div>
+  const galleryHTML = photos.slice(0, 6).map((p) => `
+    <div class="gallery-item hover-lift reveal">
+      <img src="${p}" alt="" loading="lazy" />
     </div>
-    <div class="footer-links">
-      ${config.pages
-        .map(
-          (p) =>
-            '<a href="#' +
-            p.toLowerCase().replace(/\s+/g, "-") +
-            '" data-page>' +
-            p +
-            "</a>"
-        )
-        .join("")}
-    </div>
-  </div>
-  <div class="footer-bottom">© ${new Date().getFullYear()} ${config.name}. Tous droits réservés.</div>
-</footer>`;
+  `).join("");
 
   return `<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${config.name} — ${config.tagline}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=${profile.fontDisplay.replace(
-    / /g,
-    "+"
-  )}:wght@400;500;600;700;800&family=${profile.fontBody.replace(
-    / /g,
-    "+"
-  )}:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>${buildStyles(config, profile, primary, secondary)}</style>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${name} — ${tagline}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased}
+body{font-family:system-ui,-apple-system,'Inter',sans-serif;background:#0a0a0a;color:#f5f5f5;line-height:1.6;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+img{max-width:100%;display:block}
+
+/* ═══ HEADER ═══ */
+header{position:fixed;top:0;left:0;right:0;z-index:1000;background:rgba(10,10,10,.85);backdrop-filter:blur(20px);border-bottom:1px solid #222;padding:16px 0;animation:fadeIn 1s both}
+.nav{max-width:1400px;margin:0 auto;padding:0 32px;display:flex;align-items:center;justify-content:space-between;gap:32px}
+.logo{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:800;color:${primary}}
+.logo-mark{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,${primary},${secondary});display:flex;align-items:center;justify-content:center;color:#000;font-weight:900;font-size:18px}
+.nav-links{display:flex;gap:28px;font-size:14px;font-weight:500}
+.nav-links a{opacity:.7;transition:opacity .3s}
+.nav-links a:hover{opacity:1;color:${primary}}
+.cta-btn{padding:12px 24px;background:${primary};color:#000;border:none;border-radius:100px;font-weight:700;font-size:14px;cursor:pointer;transition:transform .3s,box-shadow .3s;font-family:inherit}
+.cta-btn:hover{transform:translateY(-3px) scale(1.05);box-shadow:0 12px 30px ${primary}60}
+
+/* ═══ HERO ═══ */
+.hero{position:relative;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:120px 32px 60px}
+.hero-video{position:absolute;top:50%;left:50%;min-width:100%;min-height:100%;width:auto;height:auto;transform:translate(-50%,-50%);object-fit:cover;z-index:0;filter:brightness(.35) saturate(1.3)}
+.hero-overlay{position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,10,10,.7) 0%,rgba(10,10,10,.5) 50%,#0a0a0a 100%);z-index:1}
+.hero-content{position:relative;z-index:4;text-align:center;max-width:1000px}
+.hero-badge{display:inline-block;padding:10px 20px;background:${primary}20;border:1px solid ${primary}60;border-radius:100px;font-size:12px;font-weight:700;color:${primary};letter-spacing:3px;text-transform:uppercase;margin-bottom:24px;animation:fadeIn 1.2s .2s both}
+.hero h1{font-size:clamp(48px,9vw,140px);font-weight:900;line-height:.9;letter-spacing:-4px;margin-bottom:24px;background:linear-gradient(180deg,#fff 0%,${primary} 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:heroIn 1.8s cubic-bezier(.16,1,.3,1) .3s both}
+.hero p{font-size:clamp(16px,1.8vw,22px);opacity:.85;max-width:700px;margin:0 auto 40px;animation:slideUp 1.5s cubic-bezier(.16,1,.3,1) .8s both}
+.hero-cta{display:inline-flex;align-items:center;gap:12px;background:${primary};color:#000;padding:20px 48px;font-size:16px;font-weight:800;border-radius:100px;box-shadow:0 15px 50px ${primary}60;transition:all .4s;animation:slideUp 1.5s cubic-bezier(.16,1,.3,1) 1.2s both;cursor:pointer;border:none;font-family:inherit}
+.hero-cta:hover{transform:translateY(-8px) scale(1.05);box-shadow:0 30px 80px ${primary}90}
+
+/* ═══ SECTIONS ═══ */
+section{padding:100px 32px;position:relative}
+.container{max-width:1200px;margin:0 auto}
+.section-header{text-align:center;margin-bottom:64px}
+.section-label{display:inline-block;font-size:12px;font-weight:700;color:${primary};letter-spacing:4px;text-transform:uppercase;margin-bottom:16px;padding:8px 20px;border:1px solid ${primary}40;border-radius:100px}
+.section-title{font-size:clamp(36px,5vw,64px);font-weight:900;letter-spacing:-2px;line-height:1.1;margin-bottom:20px}
+.section-desc{font-size:16px;opacity:.6;max-width:600px;margin:0 auto}
+
+/* ═══ STATS ═══ */
+.stats-section{background:linear-gradient(180deg,transparent,#141414 50%,transparent)}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:32px}
+.stat{text-align:center;padding:32px 16px}
+.stat-value{font-size:clamp(40px,6vw,64px);font-weight:900;color:${primary};letter-spacing:-2px;line-height:1}
+.stat-label{font-size:14px;opacity:.6;margin-top:8px;text-transform:uppercase;letter-spacing:2px}
+
+/* ═══ CARDS ═══ */
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px}
+.card{background:#141414;border:1px solid #222;border-radius:20px;padding:32px;transition:all .5s cubic-bezier(.16,1,.3,1)}
+.card:hover{border-color:${primary}80;box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.card-icon{font-size:48px;margin-bottom:20px}
+.card-title{font-size:20px;font-weight:800;margin-bottom:12px;color:#fff}
+.card-desc{font-size:14px;opacity:.7;line-height:1.6}
+
+/* ═══ VIDEO SECTIONS ═══ */
+.video-section{position:relative;min-height:70vh;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:80px 32px}
+.video-section video{position:absolute;top:50%;left:50%;min-width:100%;min-height:100%;width:auto;height:auto;transform:translate(-50%,-50%);object-fit:cover;filter:brightness(.4);z-index:0}
+.video-overlay{position:absolute;inset:0;background:linear-gradient(180deg,#0a0a0a 0%,rgba(10,10,10,.6) 30%,rgba(10,10,10,.6) 70%,#0a0a0a 100%);z-index:1}
+.video-content{position:relative;z-index:2;text-align:center;max-width:800px}
+.video-content h2{font-size:clamp(36px,5vw,72px);font-weight:900;letter-spacing:-2.5px;line-height:1.05;margin-bottom:20px;color:#fff}
+.video-content p{font-size:16px;opacity:.85;color:#fff}
+
+/* ═══ GALERIE ═══ */
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}
+.gallery-item{border-radius:16px;overflow:hidden;aspect-ratio:1;background:#141414}
+.gallery-item img{width:100%;height:100%;object-fit:cover;transition:transform .8s cubic-bezier(.16,1,.3,1)}
+.gallery-item:hover img{transform:scale(1.1)}
+
+/* ═══ TESTIMONIALS ═══ */
+.testimonials-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px}
+.testimonial{background:#141414;border:1px solid #222;border-radius:20px;padding:32px}
+.testimonial-stars{color:#f59e0b;font-size:20px;margin-bottom:16px;letter-spacing:2px}
+.testimonial-text{font-size:15px;opacity:.85;line-height:1.7;margin-bottom:20px;font-style:italic}
+.testimonial-author{display:flex;align-items:center;gap:12px}
+.testimonial-author img{width:48px;height:48px;border-radius:50%;object-fit:cover}
+.testimonial-name{font-weight:700;font-size:14px}
+.testimonial-role{font-size:12px;opacity:.6}
+
+/* ═══ FAQ ═══ */
+.faq-list{max-width:800px;margin:0 auto}
+.faq-item{background:#141414;border:1px solid #222;border-radius:16px;padding:24px;margin-bottom:16px;cursor:pointer;transition:border-color .3s}
+.faq-item:hover{border-color:${primary}60}
+.faq-item summary{font-size:16px;font-weight:700;list-style:none;display:flex;justify-content:space-between;align-items:center}
+.faq-item summary::after{content:'+';font-size:24px;color:${primary};transition:transform .3s}
+.faq-item[open] summary::after{transform:rotate(45deg)}
+.faq-item p{margin-top:16px;opacity:.75;font-size:14px;line-height:1.7}
+
+/* ═══ CTA FINAL ═══ */
+.cta-section{text-align:center;padding:120px 32px}
+.cta-section h2{font-size:clamp(36px,5vw,64px);font-weight:900;letter-spacing:-2px;margin-bottom:20px}
+.cta-section p{font-size:18px;opacity:.7;margin-bottom:40px}
+
+/* ═══ FOOTER ═══ */
+footer{border-top:1px solid #222;padding:60px 32px 40px;text-align:center}
+footer p{font-size:13px;opacity:.5;margin-bottom:8px}
+
+/* ═══ ANIMATIONS ═══ */
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideUp{from{opacity:0;transform:translateY(60px)}to{opacity:1;transform:translateY(0)}}
+@keyframes heroIn{from{opacity:0;transform:translateY(100px) scale(.9);filter:blur(20px)}to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}}
+@keyframes floatAnim{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes pulseGlow{0%,100%{box-shadow:0 0 20px ${primary}30}50%{box-shadow:0 0 40px ${primary}70}}
+@keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+
+.hover-lift{transition:transform .4s cubic-bezier(.16,1,.3,1),box-shadow .4s cubic-bezier(.16,1,.3,1),border-color .4s}
+.hover-lift:hover{transform:translateY(-8px) scale(1.02);box-shadow:0 24px 50px rgba(0,0,0,.5);border-color:${primary}80}
+
+.reveal{${activeAnim.from}transition:opacity 1s cubic-bezier(.16,1,.3,1),transform 1s cubic-bezier(.16,1,.3,1)}
+.reveal.visible{${activeAnim.to}}
+
+.cards-grid .card:nth-child(1){transition-delay:.05s}
+.cards-grid .card:nth-child(2){transition-delay:.1s}
+.cards-grid .card:nth-child(3){transition-delay:.15s}
+.cards-grid .card:nth-child(4){transition-delay:.2s}
+.cards-grid .card:nth-child(5){transition-delay:.25s}
+.cards-grid .card:nth-child(6){transition-delay:.3s}
+
+.stats-grid .stat:nth-child(1){transition-delay:.05s}
+.stats-grid .stat:nth-child(2){transition-delay:.1s}
+.stats-grid .stat:nth-child(3){transition-delay:.15s}
+.stats-grid .stat:nth-child(4){transition-delay:.2s}
+
+.testimonials-grid .testimonial:nth-child(1){transition-delay:.05s}
+.testimonials-grid .testimonial:nth-child(2){transition-delay:.1s}
+.testimonials-grid .testimonial:nth-child(3){transition-delay:.15s}
+
+.gallery-grid .gallery-item:nth-child(1){transition-delay:.05s}
+.gallery-grid .gallery-item:nth-child(2){transition-delay:.1s}
+.gallery-grid .gallery-item:nth-child(3){transition-delay:.15s}
+.gallery-grid .gallery-item:nth-child(4){transition-delay:.2s}
+.gallery-grid .gallery-item:nth-child(5){transition-delay:.25s}
+.gallery-grid .gallery-item:nth-child(6){transition-delay:.3s}
+
+${animations?.includes("float") ? `.hero-badge{animation:fadeIn 1.2s .2s both, floatAnim 4s ease-in-out infinite 1.4s}\n.card:hover .card-icon{animation:floatAnim 2s ease-in-out infinite}` : ""}
+${animations?.includes("gradient") ? `.hero h1{background:linear-gradient(90deg,#fff,${primary},#fff,${secondary},#fff);background-size:300% 300%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:heroIn 1.8s cubic-bezier(.16,1,.3,1) .3s both, gradientShift 8s ease infinite 2s}` : ""}
+
+@media(max-width:768px){
+  .nav-links{display:none}
+  section{padding:60px 20px}
+  .hero{padding:100px 20px 40px}
+  .hero h1{letter-spacing:-2px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+</style>
 </head>
 <body>
-${header}
-${buildHero(config, safeAssets, profile, primary)}
-${pagesHTML}
-${buildCTA(config, primary)}
-${footer}
-${SCRIPT}
+
+<header>
+  <div class="nav">
+    <div class="logo">
+      <span class="logo-mark">${name.charAt(0).toUpperCase()}</span>
+      <span>${name}</span>
+    </div>
+    <nav class="nav-links">
+      ${content.services.slice(0, 4).map((s) => `<a href="#s-${s.title.toLowerCase().replace(/\s/g, "-")}">${s.title}</a>`).join("")}
+      <a href="#contact">Contact</a>
+    </nav>
+    <button class="cta-btn" onclick="document.getElementById('contact').scrollIntoView({behavior:'smooth'})">${content.cta.button}</button>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <video class="hero-video" autoplay muted loop playsinline preload="auto">
+    <source src="${heroVideo}" type="video/mp4">
+  </video>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="hero-badge">${tagline}</div>
+    <h1>${content.hero.title}</h1>
+    <p>${content.hero.subtitle}</p>
+    <button class="hero-cta" onclick="document.getElementById('services').scrollIntoView({behavior:'smooth'})">
+      ${content.hero.cta} →
+    </button>
+  </div>
+</section>
+
+<!-- STATS -->
+<section class="stats-section">
+  <div class="container">
+    <div class="stats-grid">${statsHTML}</div>
+  </div>
+</section>
+
+<!-- SERVICES -->
+<section id="services">
+  <div class="container">
+    <div class="section-header">
+      <span class="section-label">Nos services</span>
+      <h2 class="section-title">Ce que nous offrons</h2>
+      <p class="section-desc">Découvrez nos services conçus pour vous</p>
+    </div>
+    <div class="cards-grid">${servicesHTML}</div>
+  </div>
+</section>
+
+<!-- VIDEO MILIEU -->
+<section class="video-section">
+  <video autoplay muted loop playsinline preload="auto"><source src="${midVideo}" type="video/mp4"></video>
+  <div class="video-overlay"></div>
+  <div class="video-content">
+    <h2>L'excellence à portée de main</h2>
+    <p>Chaque détail compte pour vous offrir la meilleure expérience</p>
+  </div>
+</section>
+
+<!-- GALERIE -->
+<section>
+  <div class="container">
+    <div class="section-header">
+      <span class="section-label">Galerie</span>
+      <h2 class="section-title">Nos réalisations</h2>
+    </div>
+    <div class="gallery-grid">${galleryHTML}</div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section>
+  <div class="container">
+    <div class="section-header">
+      <span class="section-label">Témoignages</span>
+      <h2 class="section-title">Ils nous font confiance</h2>
+    </div>
+    <div class="testimonials-grid">${testimonialsHTML}</div>
+  </div>
+</section>
+
+<!-- VIDEO FIN -->
+<section class="video-section">
+  <video autoplay muted loop playsinline preload="auto"><source src="${endVideo}" type="video/mp4"></video>
+  <div class="video-overlay"></div>
+  <div class="video-content">
+    <h2>Rejoignez-nous</h2>
+    <p>Faites partie de ceux qui réussissent</p>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section>
+  <div class="container">
+    <div class="section-header">
+      <span class="section-label">FAQ</span>
+      <h2 class="section-title">Questions fréquentes</h2>
+    </div>
+    <div class="faq-list">${faqHTML}</div>
+  </div>
+</section>
+
+<!-- CTA FINAL -->
+<section class="cta-section" id="contact">
+  <div class="container">
+    <h2>${content.cta.title}</h2>
+    <p>${content.cta.subtitle}</p>
+    <button class="hero-cta">${content.cta.button}</button>
+  </div>
+</section>
+
+<footer>
+  <p><strong style="color:${primary};font-size:16px">${name}</strong></p>
+  <p>${tagline}</p>
+  <p>© 2026 ${name} — Tous droits réservés</p>
+</footer>
+
+<script>
+(function(){
+  function revealVisible(){
+    var els = document.querySelectorAll('.reveal:not(.visible)');
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    for(var i = 0; i < els.length; i++){
+      var rect = els[i].getBoundingClientRect();
+      if(rect.top < vh * 0.92){
+        els[i].classList.add('visible');
+      }
+    }
+  }
+  if('IntersectionObserver' in window){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){
+          e.target.classList.add('visible');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+    document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+  }
+  window.addEventListener('scroll', revealVisible, { passive: true });
+  window.addEventListener('load', revealVisible);
+  revealVisible();
+  setTimeout(revealVisible, 150);
+  setTimeout(revealVisible, 600);
+})();
+</script>
 </body>
 </html>`;
 }
