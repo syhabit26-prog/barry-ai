@@ -4,10 +4,11 @@ import { useState, useEffect, useRef } from "react";
 import {
   Send, Sparkles, RefreshCw, X, Trash2,
   Download, Rocket, Link2, Check, Globe, Loader2,
+  Paperclip, Image as ImageIcon,
 } from "lucide-react";
 import { loadChat, saveChat, clearChat, PAGE_KEYS, type ChatMessage } from "@/lib/chatHistory";
 
-type Message = ChatMessage;
+type Message = ChatMessage & { images?: string[] };
 
 type ProjectState = {
   type: "site" | "boutique" | "jeu" | "app" | "portfolio" | null;
@@ -18,27 +19,26 @@ type ProjectState = {
   ready: boolean;
 };
 
+const COLORS = ["rouge","bleu","vert","jaune","violet","orange","rose","noir","blanc","cyan"];
+const MOODS = ["sombre","moderne","élégant","minimaliste","vibrant","vintage","luxe","rétro"];
+
 function extractHtml(text: string): string {
   if (!text) return "";
   let cleaned = text.trim();
 
-  if (cleaned.startsWith("```html")) {
-    cleaned = cleaned.replace(/^```html\s*\n?/i, "");
-  } else if (cleaned.startsWith("```")) {
-    cleaned = cleaned.replace(/^```\s*\n?/, "");
-  }
+  // Retire ```html ... ```
+  const match = cleaned.match(/```html\s*\n([\s\S]*?)```/i);
+  if (match) return match[1].trim();
 
-  cleaned = cleaned.replace(/```\s*$/g, "").trim();
+  const match2 = cleaned.match(/```\s*\n([\s\S]*?)```/);
+  if (match2) return match2[1].trim();
 
-  const idxDoctype = cleaned.indexOf("<!DOCTYPE");
-  const idxHtml = cleaned.indexOf("<html");
-  const idxBody = cleaned.indexOf("<body");
+  // Sinon cherche <!DOCTYPE ou <html
+  const i1 = cleaned.indexOf("<!DOCTYPE");
+  const i2 = cleaned.indexOf("<html");
+  if (i1 !== -1) return cleaned.slice(i1).trim();
+  if (i2 !== -1) return cleaned.slice(i2).trim();
 
-  if (idxDoctype !== -1) return cleaned.slice(idxDoctype).trim();
-  if (idxHtml !== -1) return cleaned.slice(idxHtml).trim();
-  if (idxBody !== -1) {
-    return `<!DOCTYPE html>\n<html>\n<head><meta charset="utf-8"></head>\n${cleaned.slice(idxBody).trim()}`;
-  }
   return cleaned;
 }
 
@@ -48,7 +48,7 @@ const HTML_INITIAL = `<!DOCTYPE html>
 <meta charset="utf-8">
 <title>BARRY AI</title>
 <style>
-  body { margin:0; font-family:Inter,system-ui,sans-serif; background:#fafafa; color:#1a1a1a;
+  body { margin:0; font-family:Inter,system-ui,sans-serif; background:#0a0a0a; color:#fff;
          min-height:100vh; display:flex; flex-direction:column;
          align-items:center; justify-content:center; text-align:center; padding:40px; }
   .logo { font-size:56px; font-weight:900; letter-spacing:-2px;
@@ -65,7 +65,7 @@ const HTML_INITIAL = `<!DOCTYPE html>
 
 const MESSAGE_INITIAL: Message = {
   role: "assistant",
-  content: "Bonjour ! Dis-moi ce que tu veux créer : un site web, une boutique, un jeu, une app ou un portfolio ?",
+  content: "Bonjour ! Décris ton projet.\n\nExemple : \"crée un site pour un restaurant italien nommé Trattoria Roma, rouge et vibrant\"\n\n💡 Tu peux aussi ajouter des photos depuis ton PC avec 📎",
 };
 
 export default function BuilderPage() {
@@ -76,19 +76,17 @@ export default function BuilderPage() {
   const [key, setKey] = useState(0);
   const [mounted, setMounted] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [currentProject, setCurrentProject] = useState<{ id: string; slug: string; published: boolean } | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const [projectState, setProjectState] = useState<ProjectState>({
-    type: null,
-    name: "",
-    description: "",
-    color: "",
-    mood: "",
-    ready: false,
+    type: null, name: "", description: "", color: "", mood: "", ready: false,
   });
+
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
 
   useEffect(() => {
     const saved = loadChat(PAGE_KEYS.BUILDER);
@@ -103,9 +101,7 @@ export default function BuilderPage() {
   }, [messages, mounted]);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: "smooth" });
-    }
+    if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const handleClear = () => {
@@ -113,162 +109,280 @@ export default function BuilderPage() {
       clearChat(PAGE_KEYS.BUILDER);
       setMessages([MESSAGE_INITIAL]);
       setCurrentProject(null);
-      setProjectState({
-        type: null,
-        name: "",
-        description: "",
-        color: "",
-        mood: "",
-        ready: false,
-      });
+      setPendingImages([]);
+      setProjectState({ type: null, name: "", description: "", color: "", mood: "", ready: false });
     }
   };
 
-  const detectType = (text: string): ProjectState["type"] => {
-    const t = text.toLowerCase();
-    if (/boutique|shop|e-?commerce|dropshipping|vendre|magasin/.test(t)) return "boutique";
-    if (/jeu|game|snake|pong|tetris|arcade/.test(t)) return "jeu";
-    if (/app|application|calculatrice|todo|outil/.test(t)) return "app";
-    if (/portfolio|photographe|designer/.test(t)) return "portfolio";
-    if (/site|page|vitrine|landing/.test(t)) return "site";
-    return null;
+  // ═══ UPLOAD D'IMAGES ═══
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newImages: string[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      if (!file.type.startsWith("image/")) {
+        alert(`"${file.name}" n'est pas une image`);
+        continue;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        alert(`"${file.name}" est trop lourd (max 5 MB)`);
+        continue;
+      }
+
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      newImages.push(base64);
+    }
+
+    setPendingImages((prev) => [...prev, ...newImages]);
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeImage = (index: number) => {
+    setPendingImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const extractInfo = (text: string) => {
+    const lower = text.toLowerCase();
+
+    let type: ProjectState["type"] = null;
+    if (/boutique|shop|e-?commerce|dropshipping|vendre|magasin/.test(lower)) type = "boutique";
+    else if (/jeu|game|snake|pong|tetris|arcade/.test(lower)) type = "jeu";
+    else if (/app|application|calculatrice|todo|outil/.test(lower)) type = "app";
+    else if (/portfolio|photographe|designer/.test(lower)) type = "portfolio";
+    else if (/site|page|vitrine|landing|web/.test(lower)) type = "site";
+
+    let color = "";
+    for (const c of COLORS) {
+      if (lower.includes(c)) { color = c; break; }
+    }
+
+    let mood = "";
+    for (const m of MOODS) {
+      if (lower.includes(m)) { mood = m; break; }
+    }
+
+    let name = "";
+    const nameMatch = text.match(/(?:nommé|nommée|appelé|appelée|qui s'appelle|pour|de)\s+([A-ZÀ-Ý][a-zA-ZÀ-ÿ0-9\s'-]{2,30})/);
+    if (nameMatch) name = nameMatch[1].trim();
+
+    if (!name) {
+      const cleaned = text
+        .replace(/cree|creer|moi|un|une|des|de|du|d|la|le|les|site|web|page|jeu|game|app|application|boutique|pour|avec|sur|fais|faire|genere|générer|je|veux|souhaite|nommé|appelé|qui|s'appelle/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const words = cleaned.split(" ").filter((w) => w.length > 2 && !COLORS.includes(w.toLowerCase()) && !MOODS.includes(w.toLowerCase()));
+      if (words.length > 0) {
+        name = words.slice(0, 3).join(" ");
+        name = name.charAt(0).toUpperCase() + name.slice(1);
+      }
+    }
+
+    return { type, color, mood, name };
   };
 
   const handleSend = async () => {
     const texte = input.trim();
-    if (!texte || loading) return;
+    if (!texte && pendingImages.length === 0) return;
+    if (loading) return;
 
+    // ═══════════════════════════════════════════════════════════
+    // CAS 1 : UPLOAD D'IMAGES
+    // ═══════════════════════════════════════════════════════════
+    if (pendingImages.length > 0) {
+      const userMsg: Message = {
+        role: "user",
+        content: texte || `Ajoute ces ${pendingImages.length} photo(s) au site`,
+        images: pendingImages,
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      setInput("");
+      setLoading(true);
+      setMessages((prev) => [...prev, { role: "assistant", content: "Ajout des photos..." }]);
+
+      try {
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "modify",
+            currentHtml: html,
+            instruction: texte || "ajoute ces photos",
+            uploadedImages: pendingImages,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!data.ok) {
+          setMessages((prev) => {
+            const copie = [...prev];
+            copie[copie.length - 1] = { role: "assistant", content: "Erreur : " + data.error };
+            return copie;
+          });
+          setLoading(false);
+          return;
+        }
+
+        const newHtml = extractHtml(data.text);
+        const isValidHtml = newHtml.includes("<html") && newHtml.includes("<body");
+
+        if (newHtml && newHtml.length > 100 && isValidHtml) {
+          setHtml(newHtml);
+          setKey((k) => k + 1);
+          setMessages((prev) => {
+            const copie = [...prev];
+            copie[copie.length - 1] = { role: "assistant", content: `✅ ${pendingImages.length} photo(s) ajoutée(s) !` };
+            return copie;
+          });
+        } else {
+          setMessages((prev) => {
+            const copie = [...prev];
+            copie[copie.length - 1] = { role: "assistant", content: "❌ Erreur d'ajout. Réessaie." };
+            return copie;
+          });
+        }
+      } catch (err: any) {
+        setMessages((prev) => {
+          const copie = [...prev];
+          copie[copie.length - 1] = { role: "assistant", content: "Erreur : " + err.message };
+          return copie;
+        });
+      } finally {
+        setPendingImages([]);
+        setLoading(false);
+      }
+      return;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // CAS 2 : TEXTE (création OU modification)
+    // ═══════════════════════════════════════════════════════════
     const userMsg: Message = { role: "user", content: texte };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
 
-    // ─── ÉTAPE 1 : Détecter le type ───
-    if (!projectState.type) {
-      const detectedType = detectType(texte);
+    // Détection : c'est une modification ?
+    const isModification = /ajoute|ajouter|change|changer|modifie|modifier|enlève|enlever|remplace|remplacer|mets|mettre|améliore|améliorer|corrige|corriger|retire|retirer|photo|image|3d|modèle|couleur|titre|texte|bouton|section/i.test(texte);
 
-      if (detectedType) {
-        setProjectState((prev) => ({ ...prev, type: detectedType, description: texte }));
+    // Si un site existe déjà ET c'est une modification → MODIFY
+    if (html && html.length > 200 && isModification && !projectState.ready) {
+      setLoading(true);
+      setMessages((prev) => [...prev, { role: "assistant", content: "Modification en cours..." }]);
 
-        let question = "";
-        if (detectedType === "boutique") {
-          question = "Super ! Une boutique e-commerce.\n\nComment veux-tu l'appeler ?";
-        } else if (detectedType === "jeu") {
-          question = "Parfait ! Un jeu.\n\nQuel type de jeu ? (snake, pong, tetris, plateforme, quiz...)";
-        } else if (detectedType === "site") {
-          question = "Excellent ! Un site web.\n\nComment veux-tu l'appeler ?";
-        } else if (detectedType === "app") {
-          question = "Génial ! Une application.\n\nQuel type d'app ? (calculatrice, todo, timer, convertisseur...)";
-        } else if (detectedType === "portfolio") {
-          question = "Super ! Un portfolio.\n\nQuel est ton nom ou ton métier ?";
+      try {
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "modify",
+            currentHtml: html,
+            instruction: texte,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!data.ok) {
+          setMessages((prev) => {
+            const copie = [...prev];
+            copie[copie.length - 1] = { role: "assistant", content: "Erreur : " + data.error };
+            return copie;
+          });
+          setLoading(false);
+          return;
         }
 
-        setMessages((prev) => [...prev, { role: "assistant", content: question }]);
-        return;
+        const newHtml = extractHtml(data.text);
+        const isValidHtml = newHtml.includes("<html") && newHtml.includes("<body");
+
+        if (newHtml && newHtml.length > 100 && isValidHtml) {
+          setHtml(newHtml);
+          setKey((k) => k + 1);
+          setMessages((prev) => {
+            const copie = [...prev];
+            copie[copie.length - 1] = { role: "assistant", content: "✅ Modification appliquée !" };
+            return copie;
+          });
+        } else {
+          console.warn("HTML invalide reçu:", newHtml.slice(0, 200));
+          setMessages((prev) => {
+            const copie = [...prev];
+            copie[copie.length - 1] = { role: "assistant", content: "❌ L'IA n'a pas renvoyé de HTML valide." };
+            return copie;
+          });
+        }
+      } catch (err: any) {
+        setMessages((prev) => {
+          const copie = [...prev];
+          copie[copie.length - 1] = { role: "assistant", content: "Erreur : " + err.message };
+          return copie;
+        });
+      } finally {
+        setLoading(false);
       }
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "Je peux t'aider à créer :\n\n• Un site web\n• Une boutique e-commerce\n• Un jeu\n• Une application\n• Un portfolio\n\nDis-moi ce que tu veux !",
-        },
-      ]);
       return;
     }
 
-    // ─── ÉTAPE 2 : Attendre le nom ───
-    if (projectState.type && !projectState.name) {
-      if (projectState.type === "jeu") {
-        setProjectState((prev) => ({ ...prev, name: texte }));
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: `Parfait, un jeu de ${texte} !\n\nQuelle ambiance ? (sombre, coloré, rétro, minimaliste)`,
-          },
-        ]);
-        return;
-      }
+    // ═══════════════════════════════════════════════════════════
+    // CAS 3 : CRÉATION NORMALE
+    // ═══════════════════════════════════════════════════════════
+    const info = extractInfo(texte);
+    const newState: ProjectState = {
+      type: info.type || projectState.type,
+      name: info.name || projectState.name,
+      description: projectState.description ? projectState.description + " — " + texte : texte,
+      color: info.color || projectState.color,
+      mood: info.mood || projectState.mood,
+      ready: false,
+    };
 
-      setProjectState((prev) => ({ ...prev, name: texte, description: prev.description + " — " + texte }));
+    setProjectState(newState);
+
+    if (newState.type && newState.name && newState.color && newState.mood) {
       setMessages((prev) => [
         ...prev,
-        {
-          role: "assistant",
-          content: `"${texte}" noté !\n\nQuelle couleur principale ? (rouge, bleu, vert, jaune, violet, orange, rose, noir)`,
-        },
+        { role: "assistant", content: `Parfait ! Je génère ${newState.name}...` },
       ]);
+      await generateFinalSite(newState);
       return;
     }
 
-    // ─── ÉTAPE 3 : Attendre la couleur ───
-    if (projectState.name && !projectState.color) {
-      setProjectState((prev) => ({ ...prev, color: texte }));
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `Couleur "${texte}" choisie.\n\nQuelle ambiance ? (moderne, élégant, minimaliste, vibrant, vintage)`,
-        },
-      ]);
-      return;
-    }
+    let question = "";
+    if (!newState.type) question = "C'est quoi le type ? (site, boutique, jeu, app, portfolio)";
+    else if (!newState.name) question = "Quel nom ?";
+    else if (!newState.color) question = "Quelle couleur ? (rouge, bleu, vert, jaune, violet, orange, rose, noir)";
+    else if (!newState.mood) question = "Quelle ambiance ? (sombre, moderne, élégant, minimaliste, vibrant, vintage)";
 
-    // ─── ÉTAPE 4 : Attendre l'ambiance → GÉNÉRER ───
-    if (projectState.color && !projectState.mood) {
-      const finalState: ProjectState = {
-        ...projectState,
-        mood: texte,
-        ready: true,
-      };
-      setProjectState(finalState);
-
-      const typeLabel =
-        finalState.type === "boutique" ? "boutique" :
-        finalState.type === "jeu" ? "jeu" :
-        finalState.type === "app" ? "application" :
-        finalState.type === "portfolio" ? "portfolio" : "site";
-
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: `Parfait ! Je génère ton ${typeLabel}...` },
-      ]);
-
-      await generateFinalSite(finalState);
-      return;
-    }
-
-    setProjectState((prev) => ({ ...prev, ready: true }));
-    await generateFinalSite(projectState);
+    setMessages((prev) => [...prev, { role: "assistant", content: question }]);
   };
 
-  // ═══════════════════════════════════════════════════════════
-  // GÉNÉRATION FINALE avec JOB + POLLING
-  // ═══════════════════════════════════════════════════════════
   const generateFinalSite = async (state: ProjectState) => {
     setLoading(true);
-
     let cleanName = state.name.trim();
     if (cleanName.length > 30) cleanName = cleanName.slice(0, 30).trim();
 
     let prompt = `Crée `;
-
-    if (state.type === "boutique") {
-      prompt += `une boutique e-commerce nommée "${cleanName}". `;
-    } else if (state.type === "jeu") {
-      prompt += `un jeu de type "${cleanName}". `;
-    } else if (state.type === "app") {
-      prompt += `une application : "${cleanName}". `;
-    } else if (state.type === "portfolio") {
-      prompt += `un portfolio pour "${cleanName}". `;
-    } else {
-      prompt += `un site web nommé "${cleanName}". `;
-    }
+    if (state.type === "boutique") prompt += `une boutique e-commerce nommée "${cleanName}". `;
+    else if (state.type === "jeu") prompt += `un jeu de type "${cleanName}". `;
+    else if (state.type === "app") prompt += `une application : "${cleanName}". `;
+    else if (state.type === "portfolio") prompt += `un portfolio pour "${cleanName}". `;
+    else prompt += `un site web nommé "${cleanName}". `;
 
     if (state.color) prompt += `Couleur principale : ${state.color}. `;
     if (state.mood) prompt += `Ambiance : ${state.mood}. `;
-
-    console.log("🎯 Prompt:", prompt);
+    if (state.description) prompt += `Contexte : ${state.description}.`;
 
     try {
       const res = await fetch("/api/generate", {
@@ -282,7 +396,11 @@ export default function BuilderPage() {
             storeName: cleanName,
             color: { primary: state.color, secondary: state.color },
             mood: { id: state.mood, name: state.mood },
-          } : undefined,
+          } : {
+            name: cleanName,
+            color: state.color,
+            mood: state.mood,
+          },
         }),
       });
 
@@ -298,11 +416,10 @@ export default function BuilderPage() {
         return;
       }
 
-      // ⭐ Si jobId → POLLING
       if (data.jobId) {
         const jobId = data.jobId;
         let attempts = 0;
-        const maxAttempts = 150; // 5 min max
+        const maxAttempts = 150;
 
         const interval = setInterval(async () => {
           attempts++;
@@ -310,7 +427,7 @@ export default function BuilderPage() {
             clearInterval(interval);
             setMessages((prev) => {
               const copie = [...prev];
-              copie[copie.length - 1] = { role: "assistant", content: "Timeout : génération trop longue." };
+              copie[copie.length - 1] = { role: "assistant", content: "Timeout." };
               return copie;
             });
             setLoading(false);
@@ -320,46 +437,27 @@ export default function BuilderPage() {
           try {
             const jobRes = await fetch(`/api/jobs/${jobId}`);
             const jobData = await jobRes.json();
-
-            if (!jobData.ok) {
-              clearInterval(interval);
-              setLoading(false);
-              return;
-            }
+            if (!jobData.ok) { clearInterval(interval); setLoading(false); return; }
 
             const job = jobData.job;
 
-            // Met à jour la progression
             setMessages((prev) => {
               const copie = [...prev];
-              copie[copie.length - 1] = {
-                role: "assistant",
-                content: `Génération en cours... ${job.progress}%`,
-              };
+              copie[copie.length - 1] = { role: "assistant", content: `Génération... ${job.progress}%` };
               return copie;
             });
 
             if (job.status === "done") {
               clearInterval(interval);
-
               const htmlExtrait = extractHtml(job.result?.html || "");
               setHtml(htmlExtrait);
               setKey((k) => k + 1);
-
               if (job.result?.projectId) {
-                setCurrentProject({
-                  id: job.result.projectId,
-                  slug: job.result.slug,
-                  published: false,
-                });
+                setCurrentProject({ id: job.result.projectId, slug: job.result.slug, published: false });
               }
-
               setMessages((prev) => {
                 const copie = [...prev];
-                copie[copie.length - 1] = {
-                  role: "assistant",
-                  content: "C'est prêt ! Ton site est généré.",
-                };
+                copie[copie.length - 1] = { role: "assistant", content: `C'est prêt ! ${state.name} est généré.` };
                 return copie;
               });
               setLoading(false);
@@ -367,36 +465,33 @@ export default function BuilderPage() {
               clearInterval(interval);
               setMessages((prev) => {
                 const copie = [...prev];
-                copie[copie.length - 1] = {
-                  role: "assistant",
-                  content: "Erreur : " + (job.error || "inconnue"),
-                };
+                copie[copie.length - 1] = { role: "assistant", content: "Erreur : " + (job.error || "inconnue") };
                 return copie;
               });
               setLoading(false);
             }
-          } catch (err) {
+          } catch {
             clearInterval(interval);
             setLoading(false);
           }
         }, 2000);
-
         return;
       }
 
-      // Si pas de jobId → comportement normal (ancien)
       const htmlExtrait = extractHtml(data.text);
       if (htmlExtrait && htmlExtrait.length > 50) {
         setHtml(htmlExtrait);
         setKey((k) => k + 1);
+        if (data.projectId) {
+          setCurrentProject({ id: data.projectId, slug: data.slug, published: false });
+        }
         setMessages((prev) => {
           const copie = [...prev];
-          copie[copie.length - 1] = { role: "assistant", content: "Site généré." };
+          copie[copie.length - 1] = { role: "assistant", content: `${state.name} est généré !` };
           return copie;
         });
       }
       setLoading(false);
-
     } catch (err: any) {
       setMessages((prev) => {
         const copie = [...prev];
@@ -414,17 +509,11 @@ export default function BuilderPage() {
       const res = await fetch("/api/projects/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: currentProject.id,
-          published: !currentProject.published,
-        }),
+        body: JSON.stringify({ projectId: currentProject.id, published: !currentProject.published }),
       });
       const data = await res.json();
-      if (data.ok) {
-        setCurrentProject({ ...currentProject, published: data.project.published });
-      } else {
-        alert("Erreur : " + data.error);
-      }
+      if (data.ok) setCurrentProject({ ...currentProject, published: data.project.published });
+      else alert("Erreur : " + data.error);
     } catch (err: any) {
       alert("Erreur réseau : " + err.message);
     } finally {
@@ -442,13 +531,7 @@ export default function BuilderPage() {
 
   const downloadHtml = () => {
     const siteName = projectState.name?.trim() || "mon-site";
-    const fileName = siteName
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9-]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 50) || "mon-site";
+    const fileName = siteName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "mon-site";
 
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -463,10 +546,7 @@ export default function BuilderPage() {
 
   return (
     <div className="h-screen flex bg-white">
-
-      {/* SIDEBAR CHAT */}
       <aside className="w-[420px] flex flex-col bg-white border-r border-zinc-200/80">
-
         <div className="h-14 px-5 flex items-center gap-3 border-b border-zinc-200/80">
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center">
             <Sparkles className="w-3.5 h-3.5 text-white" />
@@ -474,10 +554,7 @@ export default function BuilderPage() {
           <div className="flex-1">
             <h1 className="text-[14px] font-semibold text-zinc-900 tracking-tight">Builder</h1>
           </div>
-          <button
-            onClick={handleClear}
-            className="w-8 h-8 rounded-lg hover:bg-zinc-100 flex items-center justify-center text-zinc-400 hover:text-red-500 transition-colors"
-          >
+          <button onClick={handleClear} className="w-8 h-8 rounded-lg hover:bg-zinc-100 flex items-center justify-center text-zinc-400 hover:text-red-500 transition-colors">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -487,8 +564,17 @@ export default function BuilderPage() {
             <div key={i}>
               {msg.role === "user" ? (
                 <div className="px-5 py-4 flex justify-end">
-                  <div className="max-w-[85%] bg-zinc-100 rounded-3xl px-5 py-2.5 text-[15px] leading-[1.7] text-zinc-900 whitespace-pre-wrap break-words">
-                    {msg.content}
+                  <div className="max-w-[85%]">
+                    <div className="bg-zinc-100 rounded-3xl px-5 py-2.5 text-[15px] leading-[1.7] text-zinc-900 whitespace-pre-wrap break-words">
+                      {msg.content}
+                    </div>
+                    {msg.images && msg.images.length > 0 && (
+                      <div className="mt-2 flex gap-2 justify-end flex-wrap">
+                        {msg.images.map((img, idx) => (
+                          <img key={idx} src={img} alt="" className="w-20 h-20 object-cover rounded-xl border border-zinc-200" />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -500,16 +586,13 @@ export default function BuilderPage() {
                     <div className="text-[15px] leading-[1.75] text-zinc-800 whitespace-pre-wrap break-words">
                       {msg.content}
                     </div>
-                    {loading &&
-                      i === messages.length - 1 &&
-                      msg.role === "assistant" &&
-                      !msg.content && (
-                        <div className="flex items-center gap-1 mt-1">
-                          <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                          <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                          <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "300ms" }} />
-                        </div>
-                      )}
+                    {loading && i === messages.length - 1 && msg.role === "assistant" && !msg.content && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                        <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                        <div className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -518,8 +601,48 @@ export default function BuilderPage() {
           <div ref={scrollRef} />
         </div>
 
+        {pendingImages.length > 0 && (
+          <div className="px-4 py-3 border-t border-zinc-200/80 bg-zinc-50">
+            <div className="flex items-center gap-2 mb-2">
+              <ImageIcon className="w-3.5 h-3.5 text-zinc-500" />
+              <span className="text-[11px] font-medium text-zinc-600">
+                {pendingImages.length} photo(s) prête(s)
+              </span>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {pendingImages.map((img, idx) => (
+                <div key={idx} className="relative group">
+                  <img src={img} alt="" className="w-16 h-16 object-cover rounded-xl border border-zinc-200" />
+                  <button
+                    onClick={() => removeImage(idx)}
+                    className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="p-4 border-t border-zinc-200/80">
           <div className="flex items-end gap-2 bg-white rounded-3xl border border-zinc-200 shadow-[0_2px_15px_rgba(0,0,0,0.04)] focus-within:border-zinc-400 transition-all p-1.5">
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-9 h-9 rounded-full hover:bg-zinc-100 flex items-center justify-center text-zinc-500 hover:text-zinc-800 transition-colors flex-shrink-0"
+              title="Ajouter des photos"
+              disabled={loading}
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -529,7 +652,7 @@ export default function BuilderPage() {
                   handleSend();
                 }
               }}
-              placeholder="Réponds ici..."
+              placeholder={pendingImages.length > 0 ? "Ajoute un message (optionnel)..." : "Décris ton projet..."}
               disabled={loading}
               rows={1}
               className="flex-1 bg-transparent px-3 py-2 text-[15px] outline-none resize-none placeholder-zinc-400 text-zinc-900 leading-[1.6]"
@@ -537,81 +660,44 @@ export default function BuilderPage() {
             />
             <button
               onClick={handleSend}
-              disabled={loading || !input.trim()}
+              disabled={loading || (!input.trim() && pendingImages.length === 0)}
               className="w-9 h-9 rounded-full bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-200 disabled:cursor-not-allowed flex items-center justify-center transition-colors flex-shrink-0"
             >
-              {loading ? (
-                <Loader2 className="w-4 h-4 text-white animate-spin" />
-              ) : (
-                <Send className="w-4 h-4 text-white" />
-              )}
+              {loading ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : <Send className="w-4 h-4 text-white" />}
             </button>
           </div>
         </div>
       </aside>
 
-      {/* MAIN */}
       <main className="flex-1 flex flex-col min-w-0">
         <header className="h-14 px-5 flex items-center gap-2 border-b border-zinc-200/80 bg-white overflow-x-auto">
           <div className="flex items-center gap-2 flex-shrink-0">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-[13px] font-medium text-zinc-700">Aperçu</span>
           </div>
-
           <div className="flex-1 min-w-2" />
-
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <button
-              onClick={downloadHtml}
-              className="h-8 px-3 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 text-zinc-700 text-[12px] font-medium flex items-center gap-1.5 transition-all whitespace-nowrap"
-            >
+            <button onClick={downloadHtml} className="h-8 px-3 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 text-zinc-700 text-[12px] font-medium flex items-center gap-1.5 transition-all whitespace-nowrap">
               <Download className="w-3.5 h-3.5" />
               <span className="hidden md:inline">Télécharger</span>
             </button>
-
-            <button
-              onClick={() => setKey((k) => k + 1)}
-              className="w-8 h-8 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 flex items-center justify-center text-zinc-500 transition-all flex-shrink-0"
-            >
+            <button onClick={() => setKey((k) => k + 1)} className="w-8 h-8 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 flex items-center justify-center text-zinc-500 transition-all flex-shrink-0">
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
-
             {currentProject?.published && (
-              <button
-                onClick={copyPublicUrl}
-                className="h-8 px-3 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 text-zinc-700 text-[12px] font-medium flex items-center gap-1.5 transition-all whitespace-nowrap"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-600" />
-                    Copié
-                  </>
-                ) : (
-                  <>
-                    <Link2 className="w-3.5 h-3.5" />
-                    Lien
-                  </>
-                )}
+              <button onClick={copyPublicUrl} className="h-8 px-3 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 text-zinc-700 text-[12px] font-medium flex items-center gap-1.5 transition-all whitespace-nowrap">
+                {copied ? <><Check className="w-3.5 h-3.5 text-emerald-600" />Copié</> : <><Link2 className="w-3.5 h-3.5" />Lien</>}
               </button>
             )}
-
             <button
               onClick={handlePublish}
               disabled={publishing || !currentProject}
               className={
                 "h-8 px-4 rounded-lg text-[12px] font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap " +
-                (currentProject?.published
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                  : "bg-zinc-900 hover:bg-zinc-800 text-white")
+                (currentProject?.published ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-zinc-900 hover:bg-zinc-800 text-white")
               }
             >
-              {publishing ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : currentProject?.published ? (
-                <Globe className="w-3.5 h-3.5" />
-              ) : (
-                <Rocket className="w-3.5 h-3.5" />
-              )}
+              {publishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : currentProject?.published ? <Globe className="w-3.5 h-3.5" /> : <Rocket className="w-3.5 h-3.5" />}
               {currentProject?.published ? "Publié" : "Publier"}
             </button>
           </div>
@@ -629,7 +715,6 @@ export default function BuilderPage() {
           </div>
         </div>
       </main>
-
     </div>
   );
 }

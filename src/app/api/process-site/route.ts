@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 import { updateJob } from "@/lib/jobs";
 import { setCache, getGenerationCacheKey } from "@/lib/cache";
-import { openai } from "@ai-sdk/openai";
-import { anthropic } from "@ai-sdk/anthropic";
-import { groq } from "@ai-sdk/groq";
-import { google } from "@ai-sdk/google";
-import { mistral } from "@ai-sdk/mistral";
-import { generateText } from "ai";
+import { buildSiteConfig, detectSiteType } from "@/lib/siteTemplates";
+import { buildMultiPageSite } from "@/lib/multiPageGenerator";
 
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 const TRANSLATIONS: Record<string, string[]> = {
   sneakers: ["running shoes", "sneakers"],
@@ -24,14 +20,33 @@ const TRANSLATIONS: Record<string, string[]> = {
   parfums: ["perfume", "fragrance"],
 };
 
-function getModel(provider: string) {
-  switch (provider) {
-    case "openai": return openai("gpt-4o-mini");
-    case "claude": return anthropic("claude-3-5-haiku-20241022");
-    case "gemini": return google("gemini-2.5-flash");
-    case "mistral": return mistral("mistral-large-latest");
-    default: return groq("openai/gpt-oss-120b");
-  }
+// ═══ Extrait le nom depuis le prompt (rapide, local) ═══
+function extractName(prompt: string): string {
+  const cleaned = prompt
+    .replace(/cree|creer|moi|un|une|des|de|du|d|la|le|les|site|web|page|pour|avec|sur|fais|faire|genere|générer|je|veux|souhaite/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const words = cleaned.split(" ").filter((w) => w.length > 2);
+  if (words.length === 0) return "Mon Site";
+
+  const name = words.slice(0, 3).join(" ");
+  return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+}
+
+// ═══ Palette selon le mood ═══
+function getColors(mood: string): { primary: string; secondary: string } {
+  const map: Record<string, { primary: string; secondary: string }> = {
+    rouge: { primary: "#ef4444", secondary: "#dc2626" },
+    bleu: { primary: "#3b82f6", secondary: "#2563eb" },
+    vert: { primary: "#22c55e", secondary: "#16a34a" },
+    jaune: { primary: "#facc15", secondary: "#f59e0b" },
+    violet: { primary: "#a855f7", secondary: "#7c3aed" },
+    orange: { primary: "#f97316", secondary: "#ea580c" },
+    rose: { primary: "#ec4899", secondary: "#db2777" },
+    noir: { primary: "#ffffff", secondary: "#a1a1aa" },
+  };
+  return map[mood.toLowerCase()] || map.jaune;
 }
 
 export async function POST(req: Request) {
@@ -49,8 +64,11 @@ export async function POST(req: Request) {
 
     console.log("🚀 Job démarré:", jobId, "| Mode:", mode);
 
-    await updateJob(jobId, { status: "processing", progress: 10 });
+    await updateJob(jobId, { status: "processing", progress: 20 });
 
+    // ═══════════════════════════════════════════════════════════
+    // MODE DROPSHIPPING — INCHANGÉ
+    // ═══════════════════════════════════════════════════════════
     if (mode === "dropshipping") {
       const keyword = customization?.keyword || "sneakers";
       const keywords = TRANSLATIONS[keyword] || [keyword];
@@ -89,7 +107,7 @@ export async function POST(req: Request) {
         console.warn("CJ échoué");
       }
 
-      await updateJob(jobId, { progress: 40 });
+      await updateJob(jobId, { progress: 60 });
 
       if (products.length === 0) {
         const { getRandomProducts } = await import("@/lib/productsDatabase");
@@ -154,57 +172,57 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    await updateJob(jobId, { progress: 20 });
+    // ═══════════════════════════════════════════════════════════
+    // MODE CODE — MULTI-PAGES ANIMÉ (ULTRA RAPIDE, 0 appel IA)
+    // ═══════════════════════════════════════════════════════════
+    await updateJob(jobId, { progress: 40 });
 
-    const systemPrompt = `Tu es un développeur web expert. Génère un site COMPLET et PROFESSIONNEL.
+    // 1. Détection locale du type (instant)
+    const type = detectSiteType(prompt);
+    console.log("🎨 Type détecté:", type);
 
-STRUCTURE :
-1. HEADER sticky (logo + nav)
-2. HERO (titre + sous-titre + CTA)
-3. SECTIONS principales
-4. CONTACT
-5. FOOTER
+    // 2. Extraction du nom (local, instant)
+    let name = customization?.name;
+    if (!name) name = extractName(prompt);
+    if (name.length > 30) name = name.slice(0, 30).trim();
 
-RÈGLES :
-- Un SEUL fichier HTML complet
-- MINIMUM 400 lignes
-- Tailwind CDN + Google Fonts
-- Responsive mobile
-- Animations CSS
+    // 3. Couleurs
+    const mood = customization?.color || customization?.mood || "jaune";
+    const color = getColors(
+      typeof mood === "string" ? mood : mood?.name || "jaune"
+    );
 
-Réponds UNIQUEMENT avec le code entre \`\`\`html et \`\`\`
-Commence par <!DOCTYPE html>`;
+    // 4. Tagline simple
+    const tagline = `Découvrez ${name}`;
 
-    const result = await generateText({
-      model: getModel("groq"),
-      system: systemPrompt,
+    // 5. Build config
+    const config = buildSiteConfig(
       prompt,
-    });
+      name,
+      tagline,
+      color,
+      customization?.mood?.name || "moderne"
+    );
 
     await updateJob(jobId, { progress: 70 });
 
-    let html = result.text.trim();
-    let m = html.match(/```html\s*\n([\s\S]*?)```/i);
-    if (m) html = m[1].trim();
-    else {
-      m = html.match(/```\s*\n([\s\S]*?)```/);
-      if (m) html = m[1].trim();
-    }
-    const idx = html.indexOf("<!DOCTYPE");
-    if (idx !== -1) html = html.slice(idx).trim();
+    // 6. Génère le HTML multi-pages (INSTANTANÉ)
+    const html = buildMultiPageSite(config);
+    console.log("✅ HTML généré:", html.length, "chars");
 
     await updateJob(jobId, { progress: 90 });
 
+    // 7. Sauvegarde
     let projectData: any = null;
     try {
       const { supabaseAdmin } = await import("@/lib/supabaseAdmin");
       const { generateSlug } = await import("@/lib/slug");
-      const slug = generateSlug("mon-site");
+      const slug = generateSlug(name);
 
       const { data } = await supabaseAdmin
         .from("projects")
         .insert({
-          name: "Mon site",
+          name,
           prompt,
           html,
           slug,
@@ -218,7 +236,7 @@ Commence par <!DOCTYPE html>`;
       console.warn("Sauvegarde échouée");
     }
 
-    const cacheKey = getGenerationCacheKey(mode, prompt, customization);
+    const cacheKey = getGenerationCacheKey(mode, prompt, null);
     await setCache(cacheKey, {
       html,
       projectId: projectData?.id,
@@ -234,9 +252,12 @@ Commence par <!DOCTYPE html>`;
         projectId: projectData?.id,
         slug: projectData?.slug,
         fromCache: false,
+        siteType: type,
+        pagesCount: config.pages.length,
       },
     });
 
+    console.log("🎉 Job terminé:", jobId);
     return NextResponse.json({ ok: true });
   } catch (err: any) {
     console.error("❌ Job échoué:", err);
