@@ -1,150 +1,89 @@
 import { NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getPlanById } from "@/lib/plans";
+import Stripe from "stripe";
 
 export async function POST(req: Request) {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return NextResponse.json({ error: "Stripe non configuré" }, { status: 500 });
+  }
+
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" });
+  const sig = req.headers.get("stripe-signature")!;
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!webhookSecret) {
+    return NextResponse.json({ error: "Webhook secret manquant" }, { status: 500 });
+  }
+
   const body = await req.text();
-  const signature = req.headers.get("stripe-signature");
-
-  if (!signature) {
-    return NextResponse.json(
-      { ok: false, error: "Signature manquante" },
-      { status: 400 }
-    );
-  }
-
-  let event: any;
-
+  let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(
-      body,
-      signature,
-      process.env.STRIPE_WEBHOOK_SECRET || ""
-    );
+    event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
   } catch (err: any) {
-    console.error("❌ Signature invalide :", err.message);
-    return NextResponse.json(
-      { ok: false, error: "Signature invalide" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: err.message }, { status: 400 });
   }
 
-  console.log("📩 Événement Stripe:", event.type);
-
   try {
+    const { supabaseAdmin } = await import("@/lib/supabaseAdmin");
+
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object as any;
-
-      const customerEmail = session.customer_details?.email || "";
-      const customerName = session.customer_details?.name || "";
-      const amount = (session.amount_total || 0) / 100;
-
-      const planId = session.metadata?.planId;
+      const session = event.data.object as Stripe.Checkout.Session;
       const userId = session.metadata?.userId;
+      const feature = session.metadata?.feature;
+      const tier = session.metadata?.tier;
+      const planId = session.metadata?.planId;
 
-      if (planId && userId) {
-        console.log("💳 Abonnement BARRY AI:", planId);
+      if (userId && feature) {
+        // Upsert dans user_features (une ligne par feature)
+        await supabaseAdmin.from("user_features").upsert(
+          {
+            user_id: userId,
+            feature,
+            tier,
+            plan_id: planId,
+            stripe_customer_id: session.customer as string,
+            stripe_subscription_id: session.subscription as string,
+            status: "active",
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,feature" }
+        );
 
-        const plan = getPlanById(planId);
-        if (!plan) {
-          console.warn("⚠️ Plan introuvable:", planId);
-          return NextResponse.json({ ok: true });
-        }
-
-        const now = new Date();
-        const endDate = new Date(now);
-
-        if (plan.duration === "monthly") {
-          endDate.setMonth(endDate.getMonth() + 1);
-        } else if (plan.duration === "6months") {
-          endDate.setMonth(endDate.getMonth() + 6);
-        } else if (plan.duration === "yearly") {
-          endDate.setFullYear(endDate.getFullYear() + 1);
-        }
-
-        const { error } = await supabaseAdmin.from("subscriptions").insert({
+        // Historique global
+        await supabaseAdmin.from("subscriptions").insert({
           user_id: userId,
-          service: plan.service,
-          tier: plan.tier,
-          duration: plan.duration,
-          stripe_subscription_id: session.subscription || null,
-          stripe_customer_id: session.customer,
+          stripe_customer_id: session.customer as string,
+          stripe_subscription_id: session.subscription as string,
           status: "active",
-          current_period_start: now.toISOString(),
-          current_period_end: endDate.toISOString(),
-          amount_paid: plan.price,
-          currency: plan.currency,
+          plan: planId || "pro",
         });
 
-        if (error) {
-          console.error("❌ Erreur insert subscription:", error);
-        } else {
-          console.log("✅ Abonnement enregistré:", planId);
-        }
-
-        if (session.customer) {
-          await supabaseAdmin
-            .from("profiles")
-            .update({ stripe_customer_id: session.customer })
-            .eq("id", userId);
-        }
-      } else {
-        console.log("💰 Commande boutique reçue:", customerEmail);
-
-        try {
-          const baseUrl =
-            process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
-          await fetch(`${baseUrl}/api/cj/create-order`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              sessionId: session.id,
-              customerEmail,
-              customerName,
-              amount,
-              lineItems: session.line_items,
-            }),
-          });
-        } catch (err: any) {
-          console.error("❌ Erreur commande CJ :", err.message);
-        }
+        console.log("✅ Abonnement activé:", userId, feature, tier);
       }
     }
 
-    if (
-      event.type === "customer.subscription.deleted" ||
-      event.type === "customer.subscription.updated"
-    ) {
-      const subscription = event.data.object;
+    if (event.type === "customer.subscription.deleted") {
+      const sub = event.data.object as Stripe.Subscription;
+      await supabaseAdmin
+        .from("user_features")
+        .update({ status: "canceled" })
+        .eq("stripe_subscription_id", sub.id);
 
       await supabaseAdmin
         .from("subscriptions")
-        .update({
-          status: subscription.status,
-          current_period_end: new Date(
-            subscription.current_period_end * 1000
-          ).toISOString(),
-          cancel_at_period_end: subscription.cancel_at_period_end,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("stripe_subscription_id", subscription.id);
-
-      console.log("✅ Abonnement mis à jour:", subscription.id);
+        .update({ status: "canceled" })
+        .eq("stripe_subscription_id", sub.id);
     }
 
-    if (event.type === "invoice.payment_failed") {
-      const invoice = event.data.object;
-      console.warn("⚠️ Paiement échoué:", invoice.customer);
+    if (event.type === "customer.subscription.updated") {
+      const sub = event.data.object as Stripe.Subscription;
+      await supabaseAdmin
+        .from("user_features")
+        .update({ status: sub.status })
+        .eq("stripe_subscription_id", sub.id);
     }
-
-    return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    console.error("❌ Erreur webhook:", err);
-    return NextResponse.json(
-      { ok: false, error: err.message },
-      { status: 500 }
-    );
+  } catch (e) {
+    console.error("Webhook error:", e);
   }
+
+  return NextResponse.json({ received: true });
 }

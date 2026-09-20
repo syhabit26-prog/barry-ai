@@ -4,10 +4,7 @@
     "lib": [
       "dom",
       "dom.iterable",
-      "esnext",
-      "ES2015.Core",
-      "ES2015.Collection",
-      "ES2015.Iterable"
+      "esnext"
     ],
     "allowJs": true,
     "skipLibCheck": true,
@@ -20,9 +17,6 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
-    "types": [
-      "node"
-    ],
     "plugins": [
       {
         "name": "next"

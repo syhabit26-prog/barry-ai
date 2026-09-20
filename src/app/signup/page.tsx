@@ -1,255 +1,106 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, Phone, Globe, Loader2, ArrowRight, Check } from "lucide-react";
-import { signUpUser, COUNTRY_CODES } from "@/lib/auth-helpers";
-import { useLang } from "@/lib/i18n/LanguageContext";
-import { LANGUAGES, type Lang } from "@/lib/i18n/translations";
+import Link from "next/link";
+import { supabase } from "@/lib/supabaseClient";
 
-export default function SignupPage() {
+export default function SignUpPage() {
   const router = useRouter();
-  const { t, setLang } = useLang();
-
-  const [form, setForm] = useState({
-    email: "",
-    password: "",
-    countryCode: "SN",
-    phone: "",
-    language: "fr" as Lang,
-  });
-
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
 
-  const selectedCountry = COUNTRY_CODES.find((c) => c.code === form.countryCode);
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     setError("");
 
-    // Validations
-    if (!form.email.includes("@")) {
-      setError(t("auth_error_email"));
-      return;
-    }
-    if (form.password.length < 8) {
-      setError(t("auth_error_password"));
-      return;
-    }
-    if (form.phone.length < 6) {
-      setError(t("auth_error_phone"));
-      return;
-    }
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } },
+    });
 
-    setLoading(true);
-
-    // Construit le numéro complet
-    const fullPhone = `${selectedCountry?.dial}${form.phone}`;
-
-    const result = await signUpUser(
-      form.email,
-      form.password,
-      fullPhone,
-      form.language
-    );
-
-    if (!result.ok) {
-      setError(result.error || t("common_error"));
+    if (error) {
+      setError(error.message);
       setLoading(false);
       return;
     }
 
-    // Applique la langue choisie
-    setLang(form.language);
-
-    setSuccess(true);
-    setLoading(false);
-
-    // Redirige après 1.5 sec
-    setTimeout(() => {
-      router.push("/");
-    }, 1500);
+    router.push("/pricing");
   };
 
-  if (success) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-            <Check className="w-8 h-8 text-emerald-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-zinc-900 mb-2">
-            {t("auth_success")}
-          </h1>
-          <p className="text-zinc-500">{t("auth_loading")}</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50 px-4 py-12">
-      <div className="w-full max-w-md">
-
-        {/* HEADER */}
-        <div className="text-center mb-8">
-          <div className="inline-flex w-14 h-14 rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-500 items-center justify-center shadow-lg shadow-orange-500/30 mb-4">
-            <span
-              className="text-white font-black text-2xl leading-none"
-              style={{ fontFamily: "Georgia, serif", fontStyle: "italic" }}
-            >
-              B
-            </span>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #fef3c7 0%, #fed7aa 50%, #fef9c3 100%)", padding: "24px", fontFamily: "system-ui, sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 24, boxShadow: "0 20px 60px rgba(251,146,60,0.2)", padding: 40 }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 64, height: 64, borderRadius: 20, background: "linear-gradient(135deg, #facc15, #f97316)", marginBottom: 16 }}>
+            <span style={{ color: "#fff", fontSize: 28, fontWeight: 900 }}>B</span>
           </div>
-          <h1 className="text-2xl font-bold text-zinc-900 tracking-tight mb-1">
-            {t("auth_signup_title")}
-          </h1>
-          <p className="text-sm text-zinc-500">{t("auth_signup_subtitle")}</p>
+          <h1 style={{ fontSize: 28, fontWeight: 900, color: "#18181b", margin: 0, marginBottom: 8 }}>Créer un compte</h1>
+          <p style={{ color: "#71717a", fontSize: 14, margin: 0 }}>Rejoins BARRY AI gratuitement</p>
         </div>
 
-        {/* FORMULAIRE */}
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-zinc-200 p-6 space-y-5">
-
-          {/* EMAIL */}
+        <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
-            <label className="block text-[13px] font-medium text-zinc-700 mb-2">
-              {t("auth_email")}
-            </label>
-            <div className="flex items-center gap-2 bg-zinc-50 border border-zinc-200 rounded-xl px-3.5 py-2.5 focus-within:border-zinc-900 focus-within:bg-white transition-all">
-              <Mail className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder={t("auth_email_placeholder")}
-                required
-                className="flex-1 bg-transparent text-[14px] outline-none text-zinc-900 placeholder-zinc-400"
-              />
-            </div>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 8 }}>Nom complet</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              placeholder="Ton nom"
+              style={{ width: "100%", padding: "12px 16px", borderRadius: 14, border: "1px solid #e4e4e7", outline: "none", fontSize: 14, boxSizing: "border-box" }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 8 }}>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="ton@email.com"
+              style={{ width: "100%", padding: "12px 16px", borderRadius: 14, border: "1px solid #e4e4e7", outline: "none", fontSize: 14, boxSizing: "border-box" }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 8 }}>Mot de passe</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+              placeholder="6 caractères minimum"
+              style={{ width: "100%", padding: "12px 16px", borderRadius: 14, border: "1px solid #e4e4e7", outline: "none", fontSize: 14, boxSizing: "border-box" }}
+            />
           </div>
 
-          {/* PASSWORD */}
-          <div>
-            <label className="block text-[13px] font-medium text-zinc-700 mb-2">
-              {t("auth_password")}
-            </label>
-            <div className="flex items-center gap-2 bg-zinc-50 border border-zinc-200 rounded-xl px-3.5 py-2.5 focus-within:border-zinc-900 focus-within:bg-white transition-all">
-              <Lock className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-              <input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                placeholder={t("auth_password_placeholder")}
-                required
-                minLength={8}
-                className="flex-1 bg-transparent text-[14px] outline-none text-zinc-900 placeholder-zinc-400"
-              />
-            </div>
-          </div>
-
-          {/* PHONE */}
-          <div>
-            <label className="block text-[13px] font-medium text-zinc-700 mb-2">
-              {t("auth_phone")}
-            </label>
-            <div className="flex gap-2">
-              {/* Country code */}
-              <select
-                value={form.countryCode}
-                onChange={(e) => setForm({ ...form, countryCode: e.target.value })}
-                className="bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-zinc-900 focus:bg-white transition-all cursor-pointer"
-              >
-                {COUNTRY_CODES.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.flag} {c.dial}
-                  </option>
-                ))}
-              </select>
-
-              {/* Phone number */}
-              <div className="flex-1 flex items-center gap-2 bg-zinc-50 border border-zinc-200 rounded-xl px-3.5 py-2.5 focus-within:border-zinc-900 focus-within:bg-white transition-all">
-                <Phone className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-                <input
-                  type="tel"
-                  value={form.phone}
-                  onChange={(e) =>
-                    setForm({ ...form, phone: e.target.value.replace(/\D/g, "") })
-                  }
-                  placeholder="77 000 00 00"
-                  required
-                  className="flex-1 bg-transparent text-[14px] outline-none text-zinc-900 placeholder-zinc-400"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* LANGUAGE */}
-          <div>
-            <label className="block text-[13px] font-medium text-zinc-700 mb-2">
-              {t("auth_language")}
-            </label>
-            <div className="grid grid-cols-5 gap-2">
-              {LANGUAGES.map((l) => (
-                <button
-                  key={l.code}
-                  type="button"
-                  onClick={() => setForm({ ...form, language: l.code })}
-                  className={
-                    "flex flex-col items-center gap-1 py-2.5 rounded-xl border-2 transition-all " +
-                    (form.language === l.code
-                      ? "border-zinc-900 bg-zinc-50"
-                      : "border-zinc-100 hover:border-zinc-300")
-                  }
-                >
-                  <span className="text-xl">{l.flag}</span>
-                  <span className="text-[10px] font-medium text-zinc-600">
-                    {l.code.toUpperCase()}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <p className="text-[11px] text-zinc-400 mt-2">{t("auth_language_help")}</p>
-          </div>
-
-          {/* ERROR */}
           {error && (
-            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-[13px] text-red-700">
+            <div style={{ padding: 12, borderRadius: 12, background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", fontSize: 13 }}>
               {error}
             </div>
           )}
 
-          {/* SUBMIT */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-[14px] flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+            style={{ width: "100%", padding: "14px", borderRadius: 14, background: "linear-gradient(90deg, #facc15, #f97316)", color: "#fff", fontWeight: 800, fontSize: 15, border: "none", cursor: loading ? "wait" : "pointer", opacity: loading ? 0.5 : 1, boxShadow: "0 10px 30px rgba(251,146,60,0.4)" }}
           >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                {t("auth_loading")}
-              </>
-            ) : (
-              <>
-                {t("auth_signup_button")}
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
+            {loading ? "Création..." : "Créer mon compte"}
           </button>
-
         </form>
 
-        {/* FOOTER */}
-        <p className="text-center text-[13px] text-zinc-500 mt-6">
-          {t("auth_have_account")}{" "}
-          <Link href="/signin" className="text-zinc-900 font-semibold hover:underline">
-            {t("nav_signin")}
+        <p style={{ textAlign: "center", fontSize: 14, color: "#71717a", marginTop: 24 }}>
+          Déjà un compte ?{" "}
+          <Link href="/signin" style={{ color: "#f97316", fontWeight: 700, textDecoration: "none" }}>
+            Se connecter
           </Link>
         </p>
-
       </div>
     </div>
   );

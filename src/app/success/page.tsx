@@ -1,44 +1,22 @@
 "use client";
 
+import Link from "next/link";
+
 export default function SuccessPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-white p-6">
-      <div className="max-w-md w-full text-center">
-
-        <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-6">
-          <svg className="w-10 h-10 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-
-        <h1 className="text-3xl font-bold text-zinc-900 mb-3 tracking-tight">
-          Commande confirmée
-        </h1>
-
-        <p className="text-zinc-600 mb-2">
-          Merci pour ton achat !
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #fef3c7 0%, #fed7aa 50%, #fef9c3 100%)", padding: "24px", fontFamily: "system-ui, sans-serif" }}>
+      <div style={{ maxWidth: 500, textAlign: "center", background: "#fff", borderRadius: 24, padding: 48, boxShadow: "0 20px 60px rgba(251,146,60,0.2)" }}>
+        <div style={{ fontSize: 72, marginBottom: 16 }}>🎉</div>
+        <h1 style={{ fontSize: 32, fontWeight: 900, color: "#18181b", margin: 0, marginBottom: 12 }}>Bienvenue dans Pro !</h1>
+        <p style={{ color: "#52525b", fontSize: 16, marginBottom: 32 }}>
+          Ton abonnement est activé. Tu as maintenant accès à toutes les fonctionnalités de BARRY AI.
         </p>
-
-        <p className="text-zinc-500 text-sm mb-8">
-          Tu vas recevoir un email de confirmation dans quelques minutes.
-          Le colis arrivera sous 7 à 15 jours.
-        </p>
-
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <a
-            href="javascript:window.close()"
-            className="px-6 py-3 rounded-lg border border-zinc-200 text-zinc-700 font-medium hover:bg-zinc-50 transition-colors"
-          >
-            Fermer cet onglet
-          </a>
-          <a
-            href="/builder"
-            className="px-6 py-3 rounded-lg bg-zinc-900 text-white font-medium hover:bg-zinc-800 transition-colors"
-          >
-            Retour au Builder
-          </a>
-        </div>
-
+        <Link
+          href="/builder"
+          style={{ display: "inline-block", padding: "14px 32px", borderRadius: 14, background: "linear-gradient(90deg, #facc15, #f97316)", color: "#fff", fontWeight: 800, fontSize: 15, textDecoration: "none", boxShadow: "0 10px 30px rgba(251,146,60,0.4)" }}
+        >
+          Aller au Builder →
+        </Link>
       </div>
     </div>
   );
